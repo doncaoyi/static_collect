@@ -1,13 +1,17 @@
 /* eslint-disable*/
 import * as moment from 'moment';
+import IndexDBWrapper from "indexdbwrapper";
+
 const CONFIG = {
     is_close: false,
     console_log: false,
     http_log: false,
-    page_log:false,
-    click_log:false,
-    error_log:false
+    page_log: false,
+    click_log: false,
+    error_log: false
 }
+const DB_NAME = 'hll_info_collect'
+
 /**
  * 参数说明
  * app_type：应用类型
@@ -15,15 +19,18 @@ const CONFIG = {
  * app_version: 所监测应用的版本号
  * config: 配置开关
  */
-export function initMonitor(app_type, user_code, app_version, router, config = CONFIG ) {
+export function initMonitor(app_type, user_code, app_version, router, config = CONFIG) {
     /** globe letiable **/
     // if(!config.is_close){
     //     return
+    // } else {
+    //     initIndexDB()
     // }
+    // initIndexDB()
     if (!localStorage) {
         window.localStorage = new Object();
     }
-    if(!indexedDB){
+    if (!indexedDB) {
 
     } else {
 
@@ -40,32 +47,34 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
     // };
     // history
 
-    window.addEventListener('popstate',(enevt)=>{
+    window.addEventListener('popstate', (enevt) => {
         // console.log(enevt)
     })
-    function dressHis(type){
+
+    function dressHis(type) {
         let ori = history[type];
-        return function (){
+        return function () {
             let e = new Event(type);
             e.arguments = arguments;
             window.dispatchEvent(e);
-            return ori.apply(this,arguments);
+            return ori.apply(this, arguments);
         }
     }
+
     history.pushState = dressHis('pushState');
     history.replaceState = dressHis('replaceState');
-    window.addEventListener('pushState',(enevt)=>{
+    window.addEventListener('pushState', (enevt) => {
         // console.log('pushState',enevt)
     })
-    window.addEventListener('replaceState',(enevt)=>{
-        console.log('replaceState',enevt)
+    window.addEventListener('replaceState', (enevt) => {
+        console.log('replaceState', enevt)
 
     })
     let
         // 暂存本地用于保存日志信息的数组
         indexDBRequest = null
 
-        ,uploadMessageArray = null
+        , uploadMessageArray = null
 
         // onerror 错误监控启动状态
         , jsMonitorStarted = false
@@ -209,7 +218,7 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
         // 用户自定义信息， 由开发者主动传入， 便于对线上问题进行准确定位
         let wmUserInfo = localStorage.wmUserInfo ? JSON.parse(localStorage.wmUserInfo) : "";
         // this.userId = utils.b64EncodeUnicode(wmUserInfo.userId || "");
-        if(app_version){
+        if (app_version) {
             this.app_version = app_version;
         }
         // this.secondUserParam = utils.b64EncodeUnicode(wmUserInfo.secondUserParam || "");
@@ -335,6 +344,7 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
         this.description = description;
         this.happenTime = new Date().getTime(); // 日志发生时间
     }
+
     ExtendBehaviorInfo.prototype = new MonitorBaseInfo();
 
 
@@ -445,6 +455,7 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
     function recordResourceError() {
         // 当浏览器不支持 window.performance.getEntries 的时候，用下边这种方式
         window.addEventListener('error', function (e) {
+            console.log('error', e)
             let typeName = e.target.localName;
             let sourceUrl = "";
             if (typeName === "link") {
@@ -560,6 +571,7 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
         };
         // 重写 onerror 进行jsError的监听
         window.onerror = function (errorMsg, url, lineNumber, columnNumber, errorObj) {
+            console.log(errorObj)
             jsMonitorStarted = true;
             let errorStack = errorObj ? errorObj.stack : null;
             siftAndMakeUpMessage("on_error", errorMsg, url, lineNumber, columnNumber, errorStack);
@@ -578,14 +590,22 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
         }
     };
 
-    function recordConsole(){
-        // 重写console.log, 可以捕获更全面的提示信息
-        let oldLog = console.log;
-        console.log = function (){
-            console.info('arguments',arguments)
-            return oldLog.apply(this,arguments)
+    function recordConsole() {
+        // 覆盖console的方法, 可以捕获更全面的提示信息
+        coverConsole('log')
+        coverConsole('error')
+        coverConsole('info')
+        coverConsole('warn')
+    }
+
+    function coverConsole(type) {
+        let old = console[type];
+        console[type] = function () {
+            // console.info('arguments',JSON.stringify([...arguments]))
+            return old.apply(this, arguments)
         }
     }
+
 
     /**
      * 页面接口请求监控
@@ -936,6 +956,7 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
             }
         }
     }
+
     // (function (num){
     //     let str = ''
     //     for(let i = 0;i<num;i++){
@@ -1038,70 +1059,93 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
 
         window.CustomEvent = CustomEvent;
     })();
+
     /**
      * IndexDB相关函数
      */
-    function createDB(indexDbName) {
-        //调用 open 方法并传递数据库名称。如果不存在具有指定名称的数据库，则会创建该数据库
-        let openRequest = indexedDB.open(indexDbName,1);
-        let db;
-        openRequest.onerror = function(e) {//当创建数据库失败时候的回调
-            console.log("Database error: " + e.target.errorCode);
-        };
-        openRequest.onsuccess = function(event) {
-            console.log("Database created");
-            db = openRequest.result;//创建数据库成功时候，将结果给db，此时db就是当前数据库
-            //alert("this is :"+db);
-        };
-        openRequest.onupgradeneeded = function (event) {//更改数据库，或者存储对象时候在这里处理
-            console.log('onupgradeneeded')
-            db = event.target.result;
-            var objectStore;
-            if (!db.objectStoreNames.contains('HTTP_LOG')) {
-                objectStore = db.createObjectStore('HTTP_LOG', { keyPath: 'id' });
-            }
-        };
-    }
-    //添加数据
-    function addIndexDb(indexDbName) {
-        var userinfos=[{
-            id:1001,
-            name:"小李",
-            age:24
-        },{
-            id:1002,
-            name:"老王",
-            age:30
-        },{
-            id:1003,
-            name:"王麻子",
-            age:26
-        }];
-        var openRequest = indexedDB.open(indexDbName,1);
-        openRequest.onerror = function(e) {//当创建数据库失败时候的回调
-            console.log("Database error: " + e.target.errorCode);
-        };
-        openRequest.onsuccess = function(event) {
-            console.log("Database created");
-            let db = openRequest.result; //创建数据库成功时候，将结果给db，此时db就是当前数据库
-            //alert("this is :"+db);
-            //打开和userinfo相关的objectstore的事物
-            var transaction = db.transaction("HTTP_LOG",'readwrite');
-            var store=transaction.objectStore("HTTP_LOG");
-            for(var i=0;i<userinfos.length;i++){
-                //alert("add"+userinfos[i]);
-                store.add(userinfos[i]);//将对象添加至userinfo相关的objectstore中
-            }
-        };
-        openRequest.onupgradeneeded = function(event) {
-            var db = event.target.result;
-            //在第一次创建数据库的时候，就创建userinfo相关的objectstore，以供后面添加数据时候使用
-            if(!db.objectStoreNames.contains('HTTP_LOG')){
-                //keyPath:Javascript对象，对象必须有一属性作为键值
-                db.createObjectStore('HTTP_LOG',{keyPath:"id"});
-            }
+
+    let onupgradeneeded = function (event) {//更改数据库，或者存储对象时候在这里处理
+        console.log('onupgradeneeded')
+        let db = this.result;
+        if (!db.objectStoreNames.contains('PAGE_LOG')) {
+            let PAGE_LOG = db.createObjectStore('PAGE_LOG', {autoIncrement: true});
+            PAGE_LOG.createIndex('logTime', 'logTime', {unique: false});
         }
+        if (!db.objectStoreNames.contains('CLICK_LOG')) {
+            let CLICK_LOG = db.createObjectStore('CLICK_LOG', {autoIncrement: true});
+            CLICK_LOG.createIndex('logTime', 'logTime', {unique: false});
+        }
+        if (!db.objectStoreNames.contains('HTTP_LOG')) {
+            let HTTP_LOG = db.createObjectStore('HTTP_LOG', {autoIncrement: true});
+            HTTP_LOG.createIndex('logTime', 'logTime', {unique: false});
+        }
+        if (!db.objectStoreNames.contains('CONSOLE_LOG')) {
+            let CONSOLE_LOG = db.createObjectStore('CONSOLE_LOG', {autoIncrement: true});
+            CONSOLE_LOG.createIndex('logTime', 'logTime', {unique: false});
+        }
+        if (!db.objectStoreNames.contains('ERROR_LOG')) {
+            let ERROR_LOG = db.createObjectStore('ERROR_LOG', {autoIncrement: true});
+            ERROR_LOG.createIndex('logTime', 'logTime', {unique: false});
+        }
+    };
+
+    function initIndexDB() {
+        //调用 open 方法并传递数据库名称。如果不存在具有指定名称的数据库，则会创建该数据库
+        let openRequest = indexedDB.open(DB_NAME, 1);
+        openRequest.onerror = function (e) {//当创建数据库失败时候的回调
+            console.log("Database error: ", e);
+        };
+        openRequest.onupgradeneeded = onupgradeneeded
     }
+
+    const db = new IndexDBWrapper(DB_NAME, 1, {onupgradeneeded})
+
+
+    //添加数据
+    function addData(table_name, dataList) {
+        let openRequest = indexedDB.open(DB_NAME, 1);
+        openRequest.onerror = function (e) {//当创建数据库失败时候的回调
+            console.log("Database error: " + e.target.errorCode);
+        };
+        openRequest.onsuccess = function (event) {
+            let db = openRequest.result; //创建数据库成功时候，将结果给db，此时db就是当前数据库
+            //打开相关的objectstore的事务
+            let transaction = db.transaction(table_name, 'readwrite');
+            let store = transaction.objectStore(table_name);
+            for (let i = 0; i < dataList.length; i++) {
+                store.add(dataList[i]);
+            }
+        };
+    }
+
+     function read(table_name, storageList = []) {
+        return new Promise((resolve, reject) => {
+            let openRequest = indexedDB.open(DB_NAME, 1);
+            let db;
+            openRequest.onerror = (e) => {//当创建数据库失败时候的回调
+                console.log("Database error: " + e.target.errorCode);
+                reject('12')
+            };
+            openRequest.onsuccess = (event) => {
+                db = openRequest.result; //创建数据库成功时候，将结果给db，此时db就是当前数据库
+                let transaction = db.transaction(table_name, 'readonly');
+                let objectStore = transaction.objectStore(table_name);
+                let cursor = objectStore.openCursor();
+
+                cursor.onsuccess = (e) => {
+                    let res = e.target.result;
+                    if (res) {
+                        storageList.push(res.value);
+                        res.continue();
+                    } else {
+                        resolve(storageList)
+                        return storageList
+                    }
+                }
+            };
+        })
+    }
+
     /**
      * 监控初始化配置, 以及启动的方法
      */
@@ -1131,6 +1175,11 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
             recordBehavior({record: 1});
             recordJavaScriptError();
             recordHttpLog();
+            let list = []
+            // addData('HTTP_LOG',[{id:123,ss:'234'},{id:13,ss:'234'},{id:23,ss:'234'}])
+            // read('HTTP_LOG').then((res) => {
+            //     console.log(res)
+            // })
 
             /**
              * 添加一个定时器，进行数据的上传
@@ -1162,6 +1211,6 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
             console.error("监控代码异常，捕获", e);
         }
     }
-    new
+
     init();
 };
