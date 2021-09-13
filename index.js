@@ -1,6 +1,6 @@
 /* eslint-disable*/
-import * as moment from 'moment';
-import IndexDBWrapper from "indexdbwrapper";
+// import * as moment from 'moment';
+// import IndexDBWrapper from "indexdbwrapper";
 
 const CONFIG = {
     is_close: false,
@@ -19,7 +19,7 @@ const DB_NAME = 'hll_info_collect'
  * app_version: 所监测应用的版本号
  * config: 配置开关
  */
-export function initMonitor(app_type, user_code, app_version, router, config = CONFIG) {
+export function initMonitor(app_type, user_code, app_version, config = CONFIG) {
     /** globe letiable **/
     // if(!config.is_close){
     //     return
@@ -35,41 +35,6 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
     } else {
 
     }
-    console.log('router', router)
-    router.beforeEach((to, from, next) => {
-        // console.log('routerrouter')
-        next()
-    })
-
-    // hash方式，同时可以可以监测到参数
-    // window.onhashchange = function () {
-    //     console.log('URL发生变化了' + location);
-    // };
-    // history
-
-    window.addEventListener('popstate', (enevt) => {
-        // console.log(enevt)
-    })
-
-    function dressHis(type) {
-        let ori = history[type];
-        return function () {
-            let e = new Event(type);
-            e.arguments = arguments;
-            window.dispatchEvent(e);
-            return ori.apply(this, arguments);
-        }
-    }
-
-    history.pushState = dressHis('pushState');
-    history.replaceState = dressHis('replaceState');
-    window.addEventListener('pushState', (enevt) => {
-        // console.log('pushState',enevt)
-    })
-    window.addEventListener('replaceState', (enevt) => {
-        console.log('replaceState', enevt)
-
-    })
     let
         // 暂存本地用于保存日志信息的数组
         indexDBRequest = null
@@ -115,35 +80,32 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
         // 本地IP, 用于区分本地开发环境
         // , WEB_LOCAL_IP = 'localhost'
 
-        // 监控平台地址
-        // , WEB_MONITOR_IP = 'www.webfunny.cn'
-
         // 用户访问日志类型
         , CUSTOMER_PV = 'CUSTOMER_PV'
 
         // 用户加载页面信息类型
-        , LOAD_PAGE = 'LOAD_PAGE'
+        , PAGE_LOG = 'PAGE_LOG'
 
         // 接口日志类型
         , HTTP_LOG = 'HTTP_LOG'
 
-        // 接口错误日志类型
-        , HTTP_ERROR = 'HTTP_ERROR'
-
         // js报错日志类型
-        , JS_ERROR = 'JS_ERROR'
+        , ERROR_LOG = 'ERROR_LOG'
+
+        // 用户的行为类型
+        , CLICK_LOG = 'CLICK_LOG'
+
+        // 控制台信息
+        , CONSOLE_LOG = 'CONSOLE_LOG'
 
         // 截屏类型
         , SCREEN_SHOT = 'SCREEN_SHOT'
 
-        // 用户的行为类型
-        , ELE_BEHAVIOR = 'ELE_BEHAVIOR'
+        // 用户自定义行为类型
+        , CUSTOMIZE_BEHAVIOR = 'CUSTOMIZE_BEHAVIOR'
 
         // 静态资源类型
         , RESOURCE_LOAD = 'RESOURCE_LOAD'
-
-        // 用户自定义行为类型
-        , CUSTOMIZE_BEHAVIOR = 'CUSTOMIZE_BEHAVIOR'
 
         // 浏览器信息
         , BROWSER_INFO = window.navigator.userAgent
@@ -154,11 +116,10 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
         // 设备信息
         , DEVICE_INFO = utils.getDevice()
 
-        // 监控代码空构造函数
-        , WebMonitor = {}
-
         // 获取用户自定义信息
-        , USER_INFO = localStorage.wmUserInfo ? JSON.parse(localStorage.wmUserInfo) : {};
+        , USER_INFO = localStorage.wmUserInfo ? JSON.parse(localStorage.wmUserInfo) : {}
+
+        , front_page = ''
 
     // 判断探针引入的方式
     // let scriptDom = document.getElementById('web_monitor');
@@ -172,136 +133,35 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
     //     }
     // }
 
-    // 日志基类, 用于其他日志的继承
+    // 日志基类, 实际保存日志
     function MonitorBaseInfo() {
-        this.handleLogInfo = function (type, logInfo) {
-            // let tempList = JSON.parse(localStorage[type] ? localStorage[type] : []);
-            let tempList = localStorage[type] ? localStorage[type] : ''
-            // localStorage[type] = JSON.stringify(tempList.push(logInfo))
+        return function () {
+            let type = this.storeName
+            let logInfo = this.saveBase
+            // console.log(this)
+            // 针对不同模块的特殊处理
             switch (type) {
-                case ELE_BEHAVIOR:
-                    localStorage[ELE_BEHAVIOR] = tempList + JSON.stringify(logInfo) + '$$$';
-                    break;
-                case JS_ERROR:
-                    localStorage[JS_ERROR] = tempList + JSON.stringify(logInfo) + '$$$';
-                    break;
-                case HTTP_LOG:
-                    localStorage[HTTP_LOG] = tempList + JSON.stringify(logInfo) + '$$$';
-                    break;
-                case SCREEN_SHOT:
-                    localStorage[SCREEN_SHOT] = tempList + JSON.stringify(logInfo) + '$$$';
-                    break;
-                case CUSTOMER_PV:
-                    localStorage[CUSTOMER_PV] = tempList + JSON.stringify(logInfo) + '$$$';
-                    break;
-                case LOAD_PAGE:
-                    localStorage[LOAD_PAGE] = tempList + JSON.stringify(logInfo) + '$$$';
-                    break;
-                case RESOURCE_LOAD:
-                    localStorage[RESOURCE_LOAD] = tempList + JSON.stringify(logInfo) + '$$$';
-                    break;
-                case CUSTOMIZE_BEHAVIOR:
-                    localStorage[CUSTOMIZE_BEHAVIOR] = tempList + JSON.stringify(logInfo) + '$$$';
-                    break;
-                default:
-                    break;
             }
+            return addData(type, [logInfo])
         };
     }
 
-    // 设置日志对象类的通用属性
-    function setCommonProperty() {
-        this.happenTime = moment().format('YYYY-MM-DD hh:mm:ss'); // 日志发生时间
-        // this.webMonitorId = WEB_MONITOR_ID;     // 用于区分应用的唯一标识（一个项目对应一个）
-        this.pageUrl = window.location.href; // 页面的url
-        // this.customerKey = utils.getCustomerKey(); // 用于区分用户，所对应唯一的标识，清理本地数据后失效，
-        // 用户自定义信息， 由开发者主动传入， 便于对线上问题进行准确定位
-        let wmUserInfo = localStorage.wmUserInfo ? JSON.parse(localStorage.wmUserInfo) : "";
-        // this.userId = utils.b64EncodeUnicode(wmUserInfo.userId || "");
-        if (app_version) {
-            this.app_version = app_version;
+    // 设置日志对象类的通用属性和操作
+    function commonRecord() {
+        this.saveBase = {
+            logTime: utils.format(new Date(), 'yyyy-MM-dd hh:mm:ss'),// 日志发生时间
+            href: window.location.href, // 页面的url
+            userId: user_code || "",
+            deviceInfo: DEVICE_INFO,
+            app_version: app_version || ''
         }
-        // this.secondUserParam = utils.b64EncodeUnicode(wmUserInfo.secondUserParam || "");
+        this.storeName = ''
+        this.monitorBase = new MonitorBaseInfo();
     }
-
-    // 用户访问行为日志(PV)
-    function CustomerPV(uploadType, loadType, loadTime) {
-        setCommonProperty.apply(this);
-        this.uploadType = uploadType;
-        this.pageKey = utils.getPageKey();  // 用于区分页面，所对应唯一的标识，每个新页面对应一个值
-        this.deviceName = DEVICE_INFO.deviceName;
-        this.os = DEVICE_INFO.os + (DEVICE_INFO.osVersion ? " " + DEVICE_INFO.osVersion : "");
-        this.browserName = DEVICE_INFO.browserName;
-        this.browserVersion = DEVICE_INFO.browserVersion;
-        // TODO 位置信息, 待处理
-        this.monitorIp = "";  // 用户的IP地址
-        this.country = "china";  // 用户所在国家
-        this.province = "";  // 用户所在省份
-        this.city = "";  // 用户所在城市
-        this.loadType = loadType;  // 用以区分首次加载
-        this.loadTime = loadTime; // 加载时间
-    }
-
-    CustomerPV.prototype = new MonitorBaseInfo();
-
-    // 用户加载页面的信息日志
-    function LoadPageInfo(uploadType, loadType, loadPage, domReady, redirect, lookupDomain, ttfb, request, loadEvent, appcache, unloadEvent, connect) {
-        setCommonProperty.apply(this);
-        this.uploadType = uploadType;
-        this.loadType = loadType;
-        this.loadPage = loadPage;
-        this.domReady = domReady;
-        this.redirect = redirect;
-        this.lookupDomain = lookupDomain;
-        this.ttfb = ttfb;
-        this.request = request;
-        this.loadEvent = loadEvent;
-        this.appcache = appcache;
-        this.unloadEvent = unloadEvent;
-        this.connect = connect;
-    }
-
-    LoadPageInfo.prototype = new MonitorBaseInfo();
-
-    // 用户行为日志，继承于日志基类MonitorBaseInfo
-    function BehaviorInfo(uploadType, behaviorType, className, placeholder, inputValue, tagName, innerText) {
-        setCommonProperty.apply(this);
-        this.uploadType = uploadType;
-        this.behaviorType = behaviorType;
-        this.className = utils.b64EncodeUnicode(className);
-        this.placeholder = utils.b64EncodeUnicode(placeholder);
-        this.inputValue = utils.b64EncodeUnicode(inputValue);
-        this.tagName = tagName;
-        this.innerText = utils.b64EncodeUnicode(encodeURIComponent(innerText));
-    }
-
-    BehaviorInfo.prototype = new MonitorBaseInfo();
-
-    // JS错误日志，继承于日志基类MonitorBaseInfo
-    function JavaScriptErrorInfo(uploadType, infoType, errorMsg, errorStack) {
-        setCommonProperty.apply(this);
-        this.uploadType = uploadType;
-        this.infoType = infoType;
-        this.pageKey = utils.getPageKey();  // 用于区分页面，所对应唯一的标识，每个新页面对应一个值
-        this.deviceName = DEVICE_INFO.deviceName;
-        this.os = DEVICE_INFO.os + (DEVICE_INFO.osVersion ? " " + DEVICE_INFO.osVersion : "");
-        this.browserName = DEVICE_INFO.browserName;
-        this.browserVersion = DEVICE_INFO.browserVersion;
-        // TODO 位置信息, 待处理
-        this.monitorIp = "";  // 用户的IP地址
-        this.country = "china";  // 用户所在国家
-        this.province = "";  // 用户所在省份
-        this.city = "";  // 用户所在城市
-        this.errorMessage = utils.b64EncodeUnicode(errorMsg)
-        this.errorStack = utils.b64EncodeUnicode(errorStack);
-        this.browserInfo = "";
-    }
-
-    JavaScriptErrorInfo.prototype = new MonitorBaseInfo();
 
     // 接口请求日志，继承于日志基类MonitorBaseInfo
     function HttpLogInfo(uploadType, url, status, statusText, statusResult, currentTime, loadTime) {
-        setCommonProperty.apply(this);
+        commonRecord.apply(this);
         this.uploadType = uploadType;  // 上传类型
         this.httpUrl = utils.b64EncodeUnicode(encodeURIComponent(url)); // 请求地址
         this.status = status; // 接口状态
@@ -311,29 +171,29 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
         this.loadTime = loadTime; // 接口请求耗时
     }
 
-    HttpLogInfo.prototype = new MonitorBaseInfo();
+    // HttpLogInfo.prototype = new MonitorBaseInfo();
 
     // JS错误截图，继承于日志基类MonitorBaseInfo
     function ScreenShotInfo(uploadType, des, screenInfo, imgType) {
-        setCommonProperty.apply(this);
+        commonRecord.apply(this);
         this.uploadType = uploadType;
         this.description = utils.b64EncodeUnicode(des);
         this.screenInfo = screenInfo;
         this.imgType = imgType || "jpeg";
     }
 
-    ScreenShotInfo.prototype = new MonitorBaseInfo();
+    // ScreenShotInfo.prototype = new MonitorBaseInfo();
 
     // 页面静态资源加载错误统计，继承于日志基类MonitorBaseInfo
     function ResourceLoadInfo(uploadType, url, elementType, status) {
-        setCommonProperty.apply(this);
+        commonRecord.apply(this);
         this.uploadType = uploadType;
         this.elementType = elementType;
         this.sourceUrl = utils.b64EncodeUnicode(encodeURIComponent(url));
         this.status = status;  // 资源加载状态： 0/失败、1/成功
     }
 
-    ResourceLoadInfo.prototype = new MonitorBaseInfo();
+    // ResourceLoadInfo.prototype = new MonitorBaseInfo();
 
     // 上传拓展日志信息的入口
     function ExtendBehaviorInfo(userId, behaviorType, behaviorResult, uploadType, description) {
@@ -345,7 +205,7 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
         this.happenTime = new Date().getTime(); // 日志发生时间
     }
 
-    ExtendBehaviorInfo.prototype = new MonitorBaseInfo();
+    // ExtendBehaviorInfo.prototype = new MonitorBaseInfo();
 
 
     /**
@@ -357,28 +217,73 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
         let webLocation = window.location.href.split('?')[0].replace('#', '');
         // 如果url变化了， 就把更新的url记录为 defaultLocation, 重新设置pageKey
         if (defaultLocation != webLocation) {
-            recordPV();
             defaultLocation = webLocation;
         }
     }
 
     /**
-     * 用户访问记录监控
-     * @param project 项目详情
+     * 页面性能信息模块
      */
-    function recordPV() {
-        utils.setPageKey();
-        let loadType = "load";
-        if (resourcesObj) {
-            if (resourcesObj[0] && resourcesObj[0].type === 'navigate') {
-                loadType = "load";
-            } else {
-                loadType = "reload";
-            }
-        }
-        let customerPv = new CustomerPV(CUSTOMER_PV, loadType, 0);
-        customerPv.handleLogInfo(CUSTOMER_PV, customerPv);
-    }
+    //            setTimeout(function () {
+    //                 if (resourcesObj) {
+    //                     let loadType = "load";
+    //                     if (resourcesObj[0] && resourcesObj[0].type === 'navigate') {
+    //                         loadType = "load";
+    //                     } else {
+    //                         loadType = "reload";
+    //                     }
+    //
+    //                     let t = timingObj;
+    //                     let loadPageInfo = new LoadPageInfo(LOAD_PAGE);
+    //                     // 页面加载类型， 区分第一次load还是reload
+    //                     loadPageInfo.loadType = loadType;
+    //
+    //                     //【重要】页面加载完成的时间
+    //                     //【原因】这几乎代表了用户等待页面可用的时间
+    //                     loadPageInfo.loadPage = t.loadEventEnd - t.navigationStart;
+    //
+    //                     //【重要】解析 DOM 树结构的时间
+    //                     //【原因】反省下你的 DOM 树嵌套是不是太多了！
+    //                     loadPageInfo.domReady = t.domComplete - t.responseEnd;
+    //
+    //                     //【重要】重定向的时间
+    //                     //【原因】拒绝重定向！比如，http://example.com/ 就不该写成 http://example.com
+    //                     loadPageInfo.redirect = t.redirectEnd - t.redirectStart;
+    //
+    //                     //【重要】DNS 查询时间
+    //                     //【原因】DNS 预加载做了么？页面内是不是使用了太多不同的域名导致域名查询的时间太长？
+    //                     // 可使用 HTML5 Prefetch 预查询 DNS ，见：[HTML5 prefetch](http://segmentfault.com/a/1190000000633364)
+    //                     loadPageInfo.lookupDomain = t.domainLookupEnd - t.domainLookupStart;
+    //
+    //                     //【重要】读取页面第一个字节的时间
+    //                     //【原因】这可以理解为用户拿到你的资源占用的时间，加异地机房了么，加CDN 处理了么？加带宽了么？加 CPU 运算速度了么？
+    //                     // TTFB 即 Time To First Byte 的意思
+    //                     // 维基百科：https://en.wikipedia.org/wiki/Time_To_First_Byte
+    //                     loadPageInfo.ttfb = t.responseStart - t.navigationStart;
+    //
+    //                     //【重要】内容加载完成的时间
+    //                     //【原因】页面内容经过 gzip 压缩了么，静态资源 css/js 等压缩了么？
+    //                     loadPageInfo.request = t.responseEnd - t.requestStart;
+    //
+    //                     //【重要】执行 onload 回调函数的时间
+    //                     //【原因】是否太多不必要的操作都放到 onload 回调函数里执行了，考虑过延迟加载、按需加载的策略么？
+    //                     loadPageInfo.loadEvent = t.loadEventEnd - t.loadEventStart;
+    //
+    //                     // DNS 缓存时间
+    //                     loadPageInfo.appcache = t.domainLookupStart - t.fetchStart;
+    //
+    //                     // 卸载页面的时间
+    //                     loadPageInfo.unloadEvent = t.unloadEventEnd - t.unloadEventStart;
+    //
+    //                     // TCP 建立连接完成握手的时间
+    //                     loadPageInfo.connect = t.connectEnd - t.connectStart;
+    //
+    //                     loadPageInfo.handleLogInfo(LOAD_PAGE, loadPageInfo);
+    //                 }
+    //                 console.log('recordLoadPage')
+    //                 // 此方法有漏洞，暂时先注释掉
+    //                 // performanceGetEntries();
+    //             }, 1000);
 
     /**
      * 用户加载页面信息监控
@@ -386,87 +291,76 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
      */
     function recordLoadPage() {
         utils.addLoadEvent(function () {
-            setTimeout(function () {
-                if (resourcesObj) {
-                    let loadType = "load";
-                    if (resourcesObj[0] && resourcesObj[0].type === 'navigate') {
-                        loadType = "load";
-                    } else {
-                        loadType = "reload";
-                    }
+            let common = new commonRecord();
+            front_page = location.origin
+            Object.assign(common.saveBase, {
+                afterPage: location.origin,
+                beforePage: document.referrer || window.opener,
+                type: 'onload'
+            })
+            common.storeName = PAGE_LOG
+            common.monitorBase().then()
+        })
+        // hash方式，同时可以可以监测到参数
+        window.onhashchange = function (e) {
+            let common = new commonRecord();
+            Object.assign(common.saveBase, {
+                afterPage: e.newURL,
+                beforePage: e.oldURL,
+                type: e.type
+            })
+            common.storeName = PAGE_LOG
+            common.monitorBase().then()
+        };
 
-                    let t = timingObj;
-                    let loadPageInfo = new LoadPageInfo(LOAD_PAGE);
-                    // 页面加载类型， 区分第一次load还是reload
-                    loadPageInfo.loadType = loadType;
-
-                    //【重要】页面加载完成的时间
-                    //【原因】这几乎代表了用户等待页面可用的时间
-                    loadPageInfo.loadPage = t.loadEventEnd - t.navigationStart;
-
-                    //【重要】解析 DOM 树结构的时间
-                    //【原因】反省下你的 DOM 树嵌套是不是太多了！
-                    loadPageInfo.domReady = t.domComplete - t.responseEnd;
-
-                    //【重要】重定向的时间
-                    //【原因】拒绝重定向！比如，http://example.com/ 就不该写成 http://example.com
-                    loadPageInfo.redirect = t.redirectEnd - t.redirectStart;
-
-                    //【重要】DNS 查询时间
-                    //【原因】DNS 预加载做了么？页面内是不是使用了太多不同的域名导致域名查询的时间太长？
-                    // 可使用 HTML5 Prefetch 预查询 DNS ，见：[HTML5 prefetch](http://segmentfault.com/a/1190000000633364)
-                    loadPageInfo.lookupDomain = t.domainLookupEnd - t.domainLookupStart;
-
-                    //【重要】读取页面第一个字节的时间
-                    //【原因】这可以理解为用户拿到你的资源占用的时间，加异地机房了么，加CDN 处理了么？加带宽了么？加 CPU 运算速度了么？
-                    // TTFB 即 Time To First Byte 的意思
-                    // 维基百科：https://en.wikipedia.org/wiki/Time_To_First_Byte
-                    loadPageInfo.ttfb = t.responseStart - t.navigationStart;
-
-                    //【重要】内容加载完成的时间
-                    //【原因】页面内容经过 gzip 压缩了么，静态资源 css/js 等压缩了么？
-                    loadPageInfo.request = t.responseEnd - t.requestStart;
-
-                    //【重要】执行 onload 回调函数的时间
-                    //【原因】是否太多不必要的操作都放到 onload 回调函数里执行了，考虑过延迟加载、按需加载的策略么？
-                    loadPageInfo.loadEvent = t.loadEventEnd - t.loadEventStart;
-
-                    // DNS 缓存时间
-                    loadPageInfo.appcache = t.domainLookupStart - t.fetchStart;
-
-                    // 卸载页面的时间
-                    loadPageInfo.unloadEvent = t.unloadEventEnd - t.unloadEventStart;
-
-                    // TCP 建立连接完成握手的时间
-                    loadPageInfo.connect = t.connectEnd - t.connectStart;
-
-                    loadPageInfo.handleLogInfo(LOAD_PAGE, loadPageInfo);
-                }
-                console.log('recordLoadPage')
-                // 此方法有漏洞，暂时先注释掉
-                // performanceGetEntries();
-            }, 1000);
+        window.addEventListener('popstate', (e) => {
+            console.info(e)
+            let common = new commonRecord();
+            Object.assign(common.saveBase, {
+                afterPage: e.arguments[2] || '',
+                beforePage: e.arguments[1] || '',
+                type: e.type
+            })
+            common.storeName = PAGE_LOG
+            common.monitorBase().then()
+        })
+        // history模式的路由监控
+        history.pushState = coverHistory('pushState');
+        history.replaceState = coverHistory('replaceState');
+        window.addEventListener('pushState', (e) => {
+            console.info('pushState', e)
+            let common = new commonRecord();
+            Object.assign(common.saveBase, {
+                afterPage: e.arguments[2] || '',
+                beforePage: e.arguments[1] || '',
+                type: e.type
+            })
+            common.storeName = PAGE_LOG
+            common.monitorBase().then()
+        })
+        window.addEventListener('replaceState', (e) => {
+            console.info('replaceState', e)
+            let common = new commonRecord();
+            Object.assign(common.saveBase, {
+                afterPage: e.arguments[2] || '',
+                beforePage: e.arguments[1] || '',
+                type: e.type
+            })
+            common.storeName = PAGE_LOG
+            common.monitorBase().then()
         })
     }
 
-    /**
-     * 监控页面静态资源加载报错
-     */
-    function recordResourceError() {
-        // 当浏览器不支持 window.performance.getEntries 的时候，用下边这种方式
-        window.addEventListener('error', function (e) {
-            console.log('error', e)
-            let typeName = e.target.localName;
-            let sourceUrl = "";
-            if (typeName === "link") {
-                sourceUrl = e.target.href;
-            } else if (typeName === "script") {
-                sourceUrl = e.target.src;
-            }
-            let resourceLoadInfo = new ResourceLoadInfo(RESOURCE_LOAD, sourceUrl, typeName, "0");
-            resourceLoadInfo.handleLogInfo(RESOURCE_LOAD, resourceLoadInfo);
-        }, true);
+    function coverHistory(type) {
+        let ori = history[type];
+        return function () {
+            let e = new Event(type);
+            e.arguments = arguments;
+            window.dispatchEvent(e);
+            return ori.apply(this, arguments);
+        }
     }
+
 
     /**
      * 利用window.performance.getEntries来对比静态资源是否加载成功
@@ -555,28 +449,30 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
      * 页面JS错误监控
      */
     function recordJavaScriptError() {
-        // 重写console.error, 可以捕获更全面的报错信息
-        let oldError = console.error;
-        console.error = function (tempErrorMsg) {
-            let errorMsg = (arguments[0] && arguments[0].message) || tempErrorMsg;
-            let lineNumber = 0;
-            let columnNumber = 0;
-            let errorObj = arguments[0] && arguments[0].stack;
-            if (!errorObj) {
-                siftAndMakeUpMessage("console_error", errorMsg, WEB_LOCATION, lineNumber, columnNumber, "CustomizeError: " + errorMsg);
-            } else {
-                siftAndMakeUpMessage("console_error", errorMsg, WEB_LOCATION, lineNumber, columnNumber, errorObj);
+        // 重写 error 进行jsError的监听
+        window.addEventListener('error', function (e) {
+            console.log('error', e)
+            let typeName = e.target.localName;
+            let sourceUrl = "";
+            if (typeName === "link") {
+                sourceUrl = e.target.href;
+            } else if (typeName === "script" || typeName === "img") {
+                sourceUrl = e.target.src;
             }
-            return oldError.apply(console, arguments);
-        };
-        // 重写 onerror 进行jsError的监听
-        window.onerror = function (errorMsg, url, lineNumber, columnNumber, errorObj) {
-            console.log(errorObj)
-            jsMonitorStarted = true;
-            let errorStack = errorObj ? errorObj.stack : null;
-            siftAndMakeUpMessage("on_error", errorMsg, url, lineNumber, columnNumber, errorStack);
-        };
+            let common = new commonRecord();
+            Object.assign(common.saveBase, {
+                stack: e.error.stack,
+                message: e.error.message,
+                type: e.type,
+                filename: e.filename,
+                typeName,
+                sourceUrl
+            })
+            common.storeName = ERROR_LOG
+            common.monitorBase().then()
+        }, true);
         window.onunhandledrejection = function (e) {
+            console.info('onunhandledrejection', e)
             let errorMsg = "";
             let errorStack = "";
             if (typeof e.reason === "object") {
@@ -586,7 +482,15 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
                 errorMsg = e.reason;
                 errorStack = "";
             }
-            siftAndMakeUpMessage("on_error", errorMsg, WEB_LOCATION, 0, 0, "UncaughtInPromiseError: " + errorStack);
+            let common = new commonRecord();
+            Object.assign(common.saveBase, {
+                stack: errorStack,
+                message: errorMsg,
+                type: e.type,
+                filename: e.filename
+            })
+            common.storeName = ERROR_LOG
+            common.monitorBase().then()
         }
     };
 
@@ -594,14 +498,23 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
         // 覆盖console的方法, 可以捕获更全面的提示信息
         coverConsole('log')
         coverConsole('error')
-        coverConsole('info')
+        // coverConsole('info')
         coverConsole('warn')
     }
 
     function coverConsole(type) {
         let old = console[type];
         console[type] = function () {
-            // console.info('arguments',JSON.stringify([...arguments]))
+            let common = new commonRecord();
+            console.info(arguments)
+            Object.assign(common.saveBase, {
+                type,
+                msg: JSON.stringify([...arguments])
+            })
+            common.storeName = CONSOLE_LOG
+            common.monitorBase().then((res) => {
+                console.info(res)
+            })
             return old.apply(this, arguments)
         }
     }
@@ -697,38 +610,38 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
     /**
      * 用户行为记录监控
      */
-    function recordBehavior(project) {
-        // 行为记录开关
-        if (project && project.record && project.record == 1) {
-            // 记录行为前，检查一下url记录是否变化
-            checkUrlChange();
-            // 记录用户点击元素的行为数据
-            document.onclick = function (e) {
-                console.log(e)
-                let className = "";
-                let placeholder = "";
-                let inputValue = "";
-                let tagName = e.target.tagName;
-                let innerText = "";
-                if (e.target.tagName != "svg" && e.target.tagName != "use") {
-                    className = e.target.className;
-                    placeholder = e.target.placeholder || "";
-                    inputValue = e.target.value || "";
-                    innerText = e.target.innerText ? e.target.innerText.replace(/\s*/g, "") : "";
-                    // 如果点击的内容过长，就截取上传
-                    if (innerText.length > 200) innerText = innerText.substring(0, 100) + "... ..." + innerText.substring(innerText.length - 99, innerText.length - 1);
-                    innerText = innerText.replace(/\s/g, '');
-                }
-                let behaviorInfo = new BehaviorInfo(ELE_BEHAVIOR, "click", className, placeholder, inputValue, tagName, innerText);
-                behaviorInfo.handleLogInfo(ELE_BEHAVIOR, behaviorInfo);
+    function recordBehavior() {
+        // 记录用户点击元素的行为数据
+        document.addEventListener('click', function (e) {
+            console.log(e)
+            let className = "";
+            let inputValue = "";
+            let tagName = e.target.tagName;
+            let innerText = "";
+            if (e.target.tagName !== "svg" && e.target.tagName !== "use") {
+                className = e.target.className;
+                inputValue = e.target.value || "";
+                innerText = e.target.innerText ? e.target.innerText.replace(/\s*/g, "") : "";
+                // 如果点击的内容过长，就截取上传
+                if (innerText.length > 200) innerText = innerText.substring(0, 100) + "... ..." + innerText.substring(innerText.length - 99, innerText.length - 1);
+                innerText = innerText.replace(/\s/g, '');
             }
-        }
+
+            let behaviorInfo = new commonRecord();
+            Object.assign(behaviorInfo.saveBase, {
+                className,
+                tagName,
+                innerText,
+                inputValue
+            })
+            behaviorInfo.storeName = CLICK_LOG
+            behaviorInfo.monitorBase().then()
+        })
     };
 
 
     /**
      * 监控代码需要的工具类
-     * @constructor
      */
     function MonitorUtils() {
         this.getUuid = function () {
@@ -827,7 +740,7 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
                 let tempCompress = dataURL.replace("data:image/webp;base64,", "");
                 let compressedDataURL = utils.b64EncodeUnicode(tempCompress);
                 let screenShotInfo = new ScreenShotInfo(SCREEN_SHOT, description, compressedDataURL)
-                screenShotInfo.handleLogInfo(SCREEN_SHOT, screenShotInfo);
+                // screenShotInfo.handleLogInfo(SCREEN_SHOT, screenShotInfo);
             });
         }
         this.getDevice = function () {
@@ -955,16 +868,25 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
                 return str;
             }
         }
+        this.format = function (date, fmt) {
+            if (!(date instanceof Date)) {
+                return ''
+            }
+            let o = {
+                "M+": date.getMonth() + 1, //月份
+                "d+": date.getDate(), //日
+                "h+": date.getHours(), //小时
+                "m+": date.getMinutes(), //分
+                "s+": date.getSeconds(), //秒
+                "q+": Math.floor((date.getMonth() + 3) / 3), //季度
+                "S": date.getMilliseconds() //毫秒
+            };
+            if (/(y+)/.test(fmt)) fmt = fmt.replace(RegExp.$1, (date.getFullYear() + "").substr(4 - RegExp.$1.length));
+            for (let k in o)
+                if (new RegExp("(" + k + ")").test(fmt)) fmt = fmt.replace(RegExp.$1, (RegExp.$1.length == 1) ? (o[k]) : (("00" + o[k]).substr(("" + o[k]).length)));
+            return fmt;
+        }
     }
-
-    // (function (num){
-    //     let str = ''
-    //     for(let i = 0;i<num;i++){
-    //         str += 'qwertyui'
-    //     }
-    //     return str
-    // })(1000000)
-    // let blob = new Blob(['1234'], {type: 'text/plain;charset=utf-8'})
 
     window.webfunny = {
         /**
@@ -1028,7 +950,7 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
          */
         wm_upload_picture: function (compressedDataURL, description, imgType) {
             let screenShotInfo = new ScreenShotInfo(SCREEN_SHOT, description, compressedDataURL, imgType || "jpeg");
-            screenShotInfo.handleLogInfo(SCREEN_SHOT, screenShotInfo);
+            // screenShotInfo.handleLogInfo(SCREEN_SHOT, screenShotInfo);
         },
         /**
          * 使用者自行上传的行为日志
@@ -1040,7 +962,7 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
          */
         wm_upload_extend_log: function (userId, behaviorType, behaviorResult, uploadType, description) {
             let extendBehaviorInfo = new ExtendBehaviorInfo(userId, behaviorType, behaviorResult, uploadType, description)
-            extendBehaviorInfo.handleLogInfo(CUSTOMIZE_BEHAVIOR, extendBehaviorInfo);
+            // extendBehaviorInfo.handleLogInfo(CUSTOMIZE_BEHAVIOR, extendBehaviorInfo);
         }
     };
 
@@ -1064,7 +986,7 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
      * IndexDB相关函数
      */
 
-    let onupgradeneeded = function (event) {//更改数据库，或者存储对象时候在这里处理
+    let onupgradeneeded = function () {//更改数据库，或者存储对象时候在这里处理
         console.log('onupgradeneeded')
         let db = this.result;
         if (!db.objectStoreNames.contains('PAGE_LOG')) {
@@ -1098,115 +1020,107 @@ export function initMonitor(app_type, user_code, app_version, router, config = C
         openRequest.onupgradeneeded = onupgradeneeded
     }
 
-    const db = new IndexDBWrapper(DB_NAME, 1, {onupgradeneeded})
+    // const db = new IndexDBWrapper(DB_NAME, 1, {onupgradeneeded})
 
+    initIndexDB()
 
     //添加数据
-    function addData(table_name, dataList) {
-        let openRequest = indexedDB.open(DB_NAME, 1);
-        openRequest.onerror = function (e) {//当创建数据库失败时候的回调
-            console.log("Database error: " + e.target.errorCode);
-        };
-        openRequest.onsuccess = function (event) {
-            let db = openRequest.result; //创建数据库成功时候，将结果给db，此时db就是当前数据库
-            //打开相关的objectstore的事务
-            let transaction = db.transaction(table_name, 'readwrite');
-            let store = transaction.objectStore(table_name);
-            for (let i = 0; i < dataList.length; i++) {
-                store.add(dataList[i]);
-            }
-        };
+    function addData(store_name, data_list) {
+        return new Promise((resolve, reject) => {
+            let openRequest = indexedDB.open(DB_NAME, 1);
+            openRequest.onerror = function (e) {//当创建数据库失败时候的回调
+                // console.log("Database error: " + e.target.errorCode);
+                reject(e)
+            };
+            openRequest.onsuccess = function (event) {
+                let db = openRequest.result; //创建数据库成功时候，将结果给db，此时db就是当前数据库
+                let transaction = db.transaction(store_name, 'readwrite');
+                let store = transaction.objectStore(store_name);
+                for (let i = 0; i < data_list.length; i++) {
+                    store.add(data_list[i]);
+                }
+                db.close()
+                resolve(db)
+            };
+        })
     }
 
-     function read(table_name, storageList = []) {
+    function findData(store_name, {index, query = null} = {}, storage_list = []) {
         return new Promise((resolve, reject) => {
             let openRequest = indexedDB.open(DB_NAME, 1);
             let db;
             openRequest.onerror = (e) => {//当创建数据库失败时候的回调
                 console.log("Database error: " + e.target.errorCode);
-                reject('12')
+                reject(e)
             };
             openRequest.onsuccess = (event) => {
                 db = openRequest.result; //创建数据库成功时候，将结果给db，此时db就是当前数据库
-                let transaction = db.transaction(table_name, 'readonly');
-                let objectStore = transaction.objectStore(table_name);
-                let cursor = objectStore.openCursor();
+                const transaction = db.transaction(store_name, 'readonly');
+                const objectStore = transaction.objectStore(store_name);
+                const target = index ? objectStore.index(index) : objectStore;
+                const cursor = target.openCursor(query);
 
                 cursor.onsuccess = (e) => {
                     let res = e.target.result;
                     if (res) {
-                        storageList.push(res.value);
+                        let obj = {
+                            primaryKey: res.primaryKey
+                        }
+                        Object.assign(obj, res.value)
+                        storage_list.push(obj);
                         res.continue();
                     } else {
-                        resolve(storageList)
-                        return storageList
+                        resolve(storage_list)
                     }
+                }
+                cursor.onerror = function (e) {
+                    reject(e)
                 }
             };
         })
     }
+
+    function deleteDataById(store_name, value) {
+        return new Promise((resolve, reject) => {
+            let openRequest = indexedDB.open(DB_NAME);
+            let db;
+            openRequest.onerror = (e) => {//当创建数据库失败时候的回调
+                reject(e)
+            };
+            openRequest.onsuccess = function (event) {
+                db = openRequest.result; //创建数据库成功时候，将结果给db，此时db就是当前数据库
+                let transaction = db.transaction(store_name, 'readwrite');
+                let objectStore = transaction.objectStore(store_name);
+                let request = objectStore.delete(Number(value));//根据查找出来的id，再次逐个查找
+                request.onsuccess = function (e) {
+                    resolve('success')
+                }
+                request.onerror = function (e) {
+                    reject(e)
+                }
+                db.close()
+            }
+        })
+    }
+
 
     /**
      * 监控初始化配置, 以及启动的方法
      */
     function init() {
         try {
-            // indexDBRequest = window.indexedDB.open('hll_info_collect', 1);
-            // indexDBRequest.onupgradeneeded = function (event) {
-            //     db = event.target.result;
-            //     let objectStore;
-            //     if (!db.objectStoreNames.contains('HTTP_LOG')) {
-            //         objectStore = db.createObjectStore('HTTP_LOG', { keyPath: 'id' });
-            //     }
-            //     let transaction = db.transaction(['HTTP_LOG'],'readwrite')
-            //     objectStore = transaction.objectStore('HTTP_LOG')
-            //     let request = objectStore.add({id:123,user:'123'})
-            //     request.onsuccess = e => {
-            //         console.log('添加数据成功。新数据的key是：',e.target.result)
-            //     }
-            // }
-            // createDB('hll_info_collect')
-            // addIndexDb('hll_info_collect')
             // 启动监控
-            recordResourceError();
-            recordPV();
             recordLoadPage();
-            recordConsole();
-            recordBehavior({record: 1});
+            recordBehavior();
             recordJavaScriptError();
-            recordHttpLog();
+            // recordHttpLog();
+            recordConsole();
             let list = []
-            // addData('HTTP_LOG',[{id:123,ss:'234'},{id:13,ss:'234'},{id:23,ss:'234'}])
-            // read('HTTP_LOG').then((res) => {
-            //     console.log(res)
+            // findData('HTTP_LOG', {index: 'logTime', query: IDBKeyRange.lowerBound(3)}).then((res) => {
+            //     res.forEach((item) => {
+            //         deleteDataById('HTTP_LOG', item.primaryKey).then()
+            //     })
             // })
-
-            /**
-             * 添加一个定时器，进行数据的上传
-             * 2秒钟进行一次URL是否变化的检测
-             * 10秒钟进行一次数据的检查并上传
-             */
-            let timeCount = 0;
-            let typeList = [ELE_BEHAVIOR, JS_ERROR, HTTP_LOG, SCREEN_SHOT, CUSTOMER_PV, LOAD_PAGE, RESOURCE_LOAD, CUSTOMIZE_BEHAVIOR]
-            // setInterval(function () {
-            //     checkUrlChange();
-            //     // 进行一次上传
-            //     if (timeCount >= 30) {
-            //         // 如果是本地的localhost, 就忽略，不进行上传
-            //         let logInfo = "";
-            //         for (let i = 0; i < typeList.length; i++) {
-            //             logInfo += (localStorage[typeList[i]] || "");
-            //         }
-            //         logInfo.length > 0 && utils.ajax("POST", HTTP_UPLOAD_LOG_INFO, {logInfo: logInfo}, function () {
-            //             for (let i = 0; i < typeList.length; i++) {
-            //                 localStorage[typeList[i]] = "";
-            //             }
-            //         }, function () {
-            //         })
-            //         timeCount = 0;
-            //     }
-            //     timeCount++;
-            // }, 200);
         } catch (e) {
             console.error("监控代码异常，捕获", e);
         }
