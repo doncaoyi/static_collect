@@ -1,3 +1,6 @@
+/* eslint-disable*/
+const ExcelJS = require('exceljs');
+
 const CONFIG = {
     is_close: true,
     console_log: true,
@@ -8,7 +11,8 @@ const CONFIG = {
 }
 const DB_NAME = 'hll_info_collect'
 const STORE_NAME = 'all_log'
-const PAGE_LOG = 'PAGE_LOG'
+const
+    PAGE_LOG = 'PAGE_LOG'
 
     // 接口日志类型
     , HTTP_LOG = 'HTTP_LOG'
@@ -37,134 +41,11 @@ const onupgradeneeded = function () {//更改数据库，或者存储对象时�
     }
 };
 
-function initIndexDB() {
-    //调用 open 方法并传递数据库名称。如果不存在具有指定名称的数据库，则会创建该数据库
-    let openRequest = indexedDB.open(DB_NAME, 1);
-    openRequest.onerror = function (e) {
-        console.log("Database error: ", e);
-    };
-    openRequest.onupgradeneeded = onupgradeneeded
-}
-
-/**
- * 添加数据
- */
-function addData(data_list) {
-    return new Promise((resolve, reject) => {
-        let openRequest = indexedDB.open(DB_NAME, 1);
-        openRequest.onerror = function (e) {//当创建数据库失败时候的回调
-            reject(e)
-        };
-        openRequest.onsuccess = function () {
-            try {
-                let db = openRequest.result; //创建数据库成功时候，将结果给db，此时db就是当前数据库
-                if (db.objectStoreNames.contains(STORE_NAME)) {
-                    let transaction = db.transaction(STORE_NAME, 'readwrite');
-                    let store = transaction.objectStore(STORE_NAME);
-                    for (let i = 0; i < data_list.length; i++) {
-                        store.add(data_list[i]);
-                    }
-                } else {
-                    deleteDb(initIndexDB)
-                }
-                db.close()
-                resolve(db)
-            } catch (e) {
-                reject(e)
-            }
-        };
-    })
-}
-
-function deleteDb(fn) {
-    let DBDeleteRequest = window.indexedDB.deleteDatabase(DB_NAME);
-    DBDeleteRequest.onsuccess = function (event) {
-        fn()
-    };
-}
-
-/**
- * 查找数据
- *
- * index：索引或者主键
- * query：范围
- * storage_list：保存找到数据的数组
- */
-function findData({index, query = null} = {}, storage_list = []) {
-    return new Promise((resolve, reject) => {
-        let openRequest = indexedDB.open(DB_NAME, 1);
-        let db;
-        openRequest.onerror = (e) => {//当创建数据库失败时候的回调
-            reject(e)
-        };
-        openRequest.onsuccess = () => {
-            try {
-                db = openRequest.result; //创建数据库成功时候，将结果给db，此时db就是当前数据库
-                if (db.objectStoreNames.contains(STORE_NAME)) {
-                    const transaction = db.transaction(STORE_NAME, 'readonly');
-                    const objectStore = transaction.objectStore(STORE_NAME);
-                    const target = index ? objectStore.index(index) : objectStore;
-                    const cursor = target.openCursor(query);
-                    cursor.onsuccess = (e) => {
-                        let res = e.target.result;
-                        if (res) {
-                            let obj = {
-                                primaryKey: res.primaryKey
-                            }
-                            Object.assign(obj, res.value)
-                            storage_list.push(obj);
-                            res.continue();
-                        } else {
-                            db.close()
-                            resolve(storage_list)
-                            return storage_list
-                        }
-                    }
-                    cursor.onerror = function (e) {
-                        reject(e)
-                    }
-                }
-            } catch (e) {
-                reject(e)
-            }
-        };
-    })
-}
-
-// 批量删除数据
-function deleteDataById(value) {
-    return new Promise((resolve, reject) => {
-        let openRequest = indexedDB.open(DB_NAME);
-        let db;
-        openRequest.onerror = (e) => {//当创建数据库失败时候的回调
-            reject(e)
-        };
-        openRequest.onsuccess = function () {
-            try {
-                db = openRequest.result; //创建数据库成功时候，将结果给db，此时db就是当前数据库
-                if (db.objectStoreNames.contains(STORE_NAME)) {
-                    let transaction = db.transaction(STORE_NAME, 'readwrite');
-                    let objectStore = transaction.objectStore(STORE_NAME);
-                    let request = objectStore.delete(Number(value));//根据查找出来的id，再次逐个查找
-                    request.onsuccess = function () {
-                        resolve('success')
-                    }
-                    request.onerror = function (e) {
-                        reject(e)
-                    }
-                    db.close()
-                }
-            } catch (e) {
-                reject(e)
-            }
-        }
-    })
-}
-
 /**
  * 监控代码需要的工具类
  */
 function MonitorUtils() {
+    let that = this
     this.getUuid = function () {
         let timeStamp = new Date().getTime()
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -184,6 +65,133 @@ function MonitorUtils() {
                 oldOnload();
                 func();
             }
+        }
+    }
+    /**
+     * 添加数据
+     */
+    this.addData = function (data_list) {
+        return new Promise((resolve, reject) => {
+            let openRequest = indexedDB.open(DB_NAME, 1);
+            openRequest.onerror = function (e) {//当创建数据库失败时候的回调
+                reject(e)
+            };
+            openRequest.onsuccess = function () {
+                try {
+                    let db = openRequest.result; //创建数据库成功时候，将结果给db，此时db就是当前数据库
+                    if (db.objectStoreNames.contains(STORE_NAME)) {
+                        let transaction = db.transaction(STORE_NAME, 'readwrite');
+                        let store = transaction.objectStore(STORE_NAME);
+                        for (let i = 0; i < data_list.length; i++) {
+                            store.add(data_list[i]);
+                        }
+                    } else {
+                        this.deleteDb(that.initIndexDB)
+                    }
+                    db.close()
+                    resolve(db)
+                } catch (e) {
+                    reject(e)
+                }
+            };
+        })
+    }
+    this.deleteDb = function (fn) {
+        let DBDeleteRequest = window.indexedDB.deleteDatabase(DB_NAME);
+        DBDeleteRequest.onsuccess = function (event) {
+            fn()
+        };
+    }
+
+    /**
+     * 查找数据
+     * index：索引或者主键
+     * query：范围
+     * storage_list：保存找到数据的数组
+     */
+    this.findData = function ({index, query = null} = {}, storage_list = []) {
+        return new Promise((resolve, reject) => {
+            let openRequest = indexedDB.open(DB_NAME, 1);
+            let db;
+            openRequest.onerror = (e) => {//当创建数据库失败时候的回调
+                reject(e)
+            };
+            openRequest.onsuccess = () => {
+                try {
+                    db = openRequest.result; //创建数据库成功时候，将结果给db，此时db就是当前数据库
+                    if (db.objectStoreNames.contains(STORE_NAME)) {
+                        const transaction = db.transaction(STORE_NAME, 'readonly');
+                        const objectStore = transaction.objectStore(STORE_NAME);
+                        const target = index ? objectStore.index(index) : objectStore;
+                        const cursor = target.openCursor(query);
+                        cursor.onsuccess = (e) => {
+                            let res = e.target.result;
+                            if (res) {
+                                let obj = {
+                                    primaryKey: res.primaryKey
+                                }
+                                Object.assign(obj, res.value)
+                                storage_list.push(obj);
+                                res.continue();
+                            } else {
+                                db.close()
+                                resolve(storage_list)
+                                return storage_list
+                            }
+                        }
+                        cursor.onerror = function (e) {
+                            reject(e)
+                        }
+                    }
+                } catch (e) {
+                    reject(e)
+                }
+            };
+        })
+    }
+
+    // 批量删除数据
+    this.deleteDataById = function (value) {
+        return new Promise((resolve, reject) => {
+            let openRequest = indexedDB.open(DB_NAME);
+            let db;
+            openRequest.onerror = (e) => {//当创建数据库失败时候的回调
+                reject(e)
+            };
+            openRequest.onsuccess = function () {
+                try {
+                    db = openRequest.result; //创建数据库成功时候，将结果给db，此时db就是当前数据库
+                    if (db.objectStoreNames.contains(STORE_NAME)) {
+                        let transaction = db.transaction(STORE_NAME, 'readwrite');
+                        let objectStore = transaction.objectStore(STORE_NAME);
+                        let request = objectStore.delete(Number(value));//根据查找出来的id，再次逐个查找
+                        request.onsuccess = function () {
+                            resolve('success')
+                        }
+                        request.onerror = function (e) {
+                            reject(e)
+                        }
+                        db.close()
+                    }
+                } catch (e) {
+                    reject(e)
+                }
+            }
+        })
+    }
+    this.initIndexDB = function () {
+        //调用 open 方法并传递数据库名称。如果不存在具有指定名称的数据库，则会创建该数据库
+        let openRequest = indexedDB.open(DB_NAME, 1);
+        openRequest.onerror = function (e) {
+            console.log("Database error: ", e);
+        };
+        openRequest.onupgradeneeded = onupgradeneeded
+    }
+    this.getConfig = function () {
+        try {
+            return (JSON.parse(localStorage.getItem('localLogConfig')) || CONFIG)
+        } catch (e) {
+            return CONFIG
         }
     }
     /**
@@ -236,6 +244,21 @@ function MonitorUtils() {
             let screenShotInfo = new ScreenShotInfo(SCREEN_SHOT, description, compressedDataURL)
             // screenShotInfo.handleLogInfo(SCREEN_SHOT, screenShotInfo);
         });
+    }
+    this.downLoad = function (buff, fileName = '操作日志') {
+        const filename = `${fileName}.xlsx`;
+        const blobContent = new Blob([buff], {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const blobUrl = window.URL.createObjectURL(blobContent);
+
+        const eleLink = document.createElement('a');
+        eleLink.download = filename;
+        eleLink.style.display = 'none';
+        eleLink.href = blobUrl;
+        document.body.appendChild(eleLink);
+        eleLink.click();
+        document.body.removeChild(eleLink);
     }
     this.getDevice = function () {
         let device = {};
@@ -341,7 +364,13 @@ function MonitorUtils() {
         device.webView = (iphone || ipad || ipod) && ua.match(/.*AppleWebKit(?!.*Safari)/i);
 
         // Export object
-        return device;
+        return {
+            deviceName: device.deviceName,
+            os: device.os + (device.osVersion ? " " + device.osVersion : ""),
+            browserName: device.browserName,
+            browserVersion: device.browserVersion
+        };
+
     }
     this.loadJs = function (url, callback) {
         let script = document.createElement('script');
@@ -363,7 +392,10 @@ function MonitorUtils() {
     }
     this.format = function (date, fmt) {
         if (!(date instanceof Date)) {
-            return ''
+            date = new Date(date)
+        }
+        if (isNaN(date.getTime())) {
+            return NaN
         }
         let o = {
             "M+": date.getMonth() + 1, //月份
@@ -381,6 +413,7 @@ function MonitorUtils() {
     }
 }
 
+const utils = new MonitorUtils()
 
 /**
  * 参数说明
@@ -389,11 +422,12 @@ function MonitorUtils() {
  * app_version: 所监测应用的版本号
  * config: 配置开关
  */
-export function initMonitor(app_type, user_code, app_version, config = CONFIG) {
+export function initMonitor(app_type, user_code, app_version) {
+    const config = utils.getConfig()
     if (!config.is_close) {
         return
     } else {
-        initIndexDB()
+        utils.initIndexDB()
     }
     if (!indexedDB) {
         console.log('indexedDB不支持')
@@ -429,9 +463,6 @@ export function initMonitor(app_type, user_code, app_version, config = CONFIG) {
         // 浏览器信息
         , BROWSER_INFO = window.navigator.userAgent
 
-        // 工具类示例化
-        , utils = new MonitorUtils()
-
         // 设备信息
         , DEVICE_INFO = utils.getDevice()
 
@@ -454,7 +485,7 @@ export function initMonitor(app_type, user_code, app_version, config = CONFIG) {
             // 针对不同模块的特殊处理
             switch (logInfo.logType) {
             }
-            return addData([logInfo]).catch((res) => {
+            return utils.addData([logInfo]).catch((res) => {
                 // 避免引起循环
                 if (logInfo.logType !== CONSOLE_LOG) {
                     console.log(res)
@@ -552,7 +583,8 @@ export function initMonitor(app_type, user_code, app_version, config = CONFIG) {
             Object.assign(common.saveBase, {
                 afterPage: location.origin,
                 beforePage: document.referrer || window.opener,
-                type: 'onload',
+                type: 'DOMContentLoaded',
+                title: document.title,
                 logType: PAGE_LOG
             })
             common.monitorBase().then()
@@ -562,46 +594,38 @@ export function initMonitor(app_type, user_code, app_version, config = CONFIG) {
             let common = new commonRecord();
             Object.assign(common.saveBase, {
                 afterPage: e.newURL,
-                beforePage: e.oldURL,
+                beforePage: e.oldURL || '',
                 type: e.type,
+                title: document.title,
                 logType: PAGE_LOG
             })
             common.monitorBase().then()
         };
 
         window.addEventListener('popstate', (e) => {
-            let common = new commonRecord();
-            Object.assign(common.saveBase, {
-                afterPage: (e?.arguments && e?.arguments[2]) || '',
-                beforePage: e?.arguments[1] || '',
-                type: e.type,
-                logType: PAGE_LOG
-            })
-            common.monitorBase().then()
+            setState(e)
         })
         // history模式的路由监控
         history.pushState = coverHistory('pushState');
         history.replaceState = coverHistory('replaceState');
         window.addEventListener('pushState', (e) => {
-            let common = new commonRecord();
-            Object.assign(common.saveBase, {
-                afterPage: e?.arguments[2] || '',
-                beforePage: e?.arguments[1] || '',
-                type: e.type,
-                logType: PAGE_LOG
-            })
-            common.monitorBase().then()
+            setState(e)
         })
         window.addEventListener('replaceState', (e) => {
-            let common = new commonRecord();
-            Object.assign(common.saveBase, {
-                afterPage: e?.arguments[2] || '',
-                beforePage: e?.arguments[1] || '',
-                type: e.type,
-                logType: PAGE_LOG
-            })
-            common.monitorBase().then()
+            setState(e)
         })
+    }
+
+    function setState(e) {
+        let common = new commonRecord();
+        Object.assign(common.saveBase, {
+            afterPage: (e.arguments && e.arguments[2]) || '',
+            beforePage: (e.arguments && e.arguments[1]) || '',
+            title: document.title,
+            type: e.type,
+            logType: PAGE_LOG
+        })
+        common.monitorBase().then()
     }
 
     function coverHistory(type) {
@@ -640,7 +664,6 @@ export function initMonitor(app_type, user_code, app_version, config = CONFIG) {
             common.monitorBase().then()
         }, true);
         window.onunhandledrejection = function (e) {
-            console.info('onunhandledrejection', e)
             let errorMsg = "";
             let errorStack = "";
             if (typeof e.reason === "object") {
@@ -665,7 +688,7 @@ export function initMonitor(app_type, user_code, app_version, config = CONFIG) {
         // 覆盖console的方法, 可以捕获更全面的提示信息
         coverConsole('log')
         coverConsole('error')
-        // coverConsole('info')
+        coverConsole('info')
         coverConsole('warn')
     }
 
@@ -673,7 +696,6 @@ export function initMonitor(app_type, user_code, app_version, config = CONFIG) {
         let old = console[type];
         console[type] = function () {
             let common = new commonRecord();
-            console.info('argument', arguments)
             const argument = {
                 ...arguments
             }
@@ -715,7 +737,7 @@ export function initMonitor(app_type, user_code, app_version, config = CONFIG) {
                 return oldOpen.apply(this, arguments)
             }
             realXHR.send = function () {
-                realXHR.SAVEINFO.parase = arguments[0] || ''
+                realXHR.SAVEINFO.params = arguments[0] || ''
                 return oldSend.apply(this, arguments)
             }
             // // 中止事件
@@ -771,12 +793,15 @@ export function initMonitor(app_type, user_code, app_version, config = CONFIG) {
         window.addEventListener('ajaxLoadEnd', function (e) {
             let currentTime = new Date().getTime()
             let url = e.detail.responseURL;
-            const responseText = e.detail.responseText;
+            let responseText = e.detail.responseText;
             let status = e.detail.status;
             const detail = e.detail.SAVEINFO;
             let statusText = e.detail.statusText;
             let loadTime = currentTime - detail.startTime;
             let common = new commonRecord();
+            if (status === 200) {
+                responseText = responseText.slice(0, 100)
+            }
             Object.assign(common.saveBase, {
                 startTimeStr: utils.format(new Date(detail.startTime), 'yyyy-MM-dd hh:mm:ss'),
                 endTimeStr: utils.format(new Date(currentTime), 'yyyy-MM-dd hh:mm:ss'),
@@ -825,11 +850,11 @@ export function initMonitor(app_type, user_code, app_version, config = CONFIG) {
     // 暴露主动操作接口
     window.hllLocalLogBase = {
         localInfo: {
-            app_type, user_code, app_version, config
+            app_type, user_code, app_version, config: utils.getConfig()
         },
         reInitDB: function () {
             if (confirm('确定重新初始化本地日志记录吗？（确认之后之前的历史记录将被清除）')) {
-                deleteDb(initIndexDB)
+                utils.deleteDb(utils.initIndexDB)
             }
         }
     };
@@ -853,19 +878,23 @@ export function initMonitor(app_type, user_code, app_version, config = CONFIG) {
     function deleteHistory() {
         window.addEventListener('DOMContentLoaded', function () {
             const time = new Date().getTime() - 7 * 24 * 60 * 60 * 1000
-            findData({index: 'timeStamp', query: IDBKeyRange.upperBound(time)}).then((list) => {
-                Promise.all(list.map(item => deleteDataById(item.primaryKey))).then().catch((res) => {
+            utils.findData({index: 'timeStamp', query: IDBKeyRange.upperBound(time)}).then((list) => {
+                Promise.all(list.map(item => utils.deleteDataById(item.primaryKey))).then().catch((res) => {
                     console.log(res)
                 })
             }).catch((res) => {
                 console.log(res)
             })
             if (location.pathname === '/dashboard' && location.hash === '#downLoad') {
-                const parent = document.querySelector('body')
-                let children = document.querySelectorAll("body>div") || [];
-                children.forEach((item) => {
-                    parent.removeChild(item);
-                })
+                // const parent = document.querySelector('body')
+                // if (!Vue) {
+                //     const vueNode = document.createElement('script')
+                //     vueNode.src = '//s-oms.huolala.cn/static/cdn/js/vue.min.js'
+                //     vueNode.onload = function () {
+                //
+                //     }
+                //     parent.appendChild(vueNode)
+                // } else {
                 // const node = document.createElement("div");
                 // node.setAttribute('id', 'app');
                 // parent.appendChild(node);
@@ -874,17 +903,35 @@ export function initMonitor(app_type, user_code, app_version, config = CONFIG) {
                 //     data: {
                 //         message: 'Hello Vue!'
                 //     },
-                //     template: '<div>{{ message }}</div>'
+                //     template: '<div>{{ message }}</div>',
+                //     method: {},
+                //     mounted: function () {
+                //         console.log('mounted')
+                //     }
                 // })
-                const template = `<img src="https://semantic-ui.com/images/avatar2/large/kristy.png" class="image">
-<div class="container">
-    <p class="name">User Name</p>
-    <p class="email">yourmail@some-email.com</p>
-    <button class="button">Follow</button>
-  </div>`
-                const node = document.createElement("template");
-                parent.appendChild(node);
-                document.write(template);
+                // }
+                // let children = document.querySelectorAll("body>div") || [];
+                // children.forEach((item) => {
+                //     parent.removeChild(item);
+                // })
+                const template = `<div style="text-align: center;margin-top: 100px" class="container">
+                                    <h3>日志导出</h3>
+                                    <form name="local_log_collect">
+                                        <div style="margin-bottom: 20px">
+                                            <label for="startTime">导出日志的开始时间:</label>
+                                            <input id="startTime" type="datetime-local" name="startTime" required>
+                                        </div>
+                                        <div style="margin-bottom: 20px">
+                                            <label for="endTime">导出日志的结束时间:</label>
+                                            <input id="endTime" type="datetime-local" name="endTime" required>
+                                        </div>
+                                        <button onclick="downLoadFile(local_log_collect.startTime.value,local_log_collect.endTime.value)" id="submit" type="button">导出日志</button>
+                                    </form>
+                                  </div>`
+                document.write(template)
+                document.title = '本地日志导出'
+                local_log_collect.startTime.value = utils.format(new Date().getTime() - 60 * 60 * 1000, 'yyyy-MM-ddThh:mm:ss')
+                local_log_collect.endTime.value = utils.format(new Date(), 'yyyy-MM-ddThh:mm:ss')
             }
         })
     }
@@ -906,14 +953,92 @@ export function initMonitor(app_type, user_code, app_version, config = CONFIG) {
     }
 
     if (config.is_close) {
-        init()
+        init();
         deleteHistory();
+        window.downLoadFile = downLoadFile;
     }
 };
 
-export function downLoadFile() {
+
+/**
+ * downLoadFile
+ * 文件下载
+ * 参数说明
+ * userCode: 用户code
+ * startTime: 开始时间，可以通过new Date生成Date对象的字符串
+ * endTime: 结束时间，可以通过new Date生成Date对象的字符串
+ */
+export function downLoadFile(start, end, userCode) {
     if (!indexedDB) {
+        alert('不支持indexDB')
         return
     }
+    if (!start || !end) {
+        alert('导出时间必填')
+        return;
+    }
+    if (!userCode) {
+        userCode = hllLocalLogBase?.localInfo?.user_code || 0
+    }
+    let startTime, endTime
+    try {
+        startTime = start ? new Date(start).getTime() : 0;
+        endTime = end ? new Date(end).getTime() : new Date().getTime();
+        if (Number.isNaN(startTime) || Number.isNaN(endTime)) {
+            alert('时间格式填写错误')
+            return;
+        }
+    } catch (e) {
+        alert('请检查输入的参数')
+        return;
+    }
+    if (!confirm(`确定要导出时间：${start}->${end}的日志吗？`)) {
+        return;
+    }
+    utils.findData({index: 'timeStamp', query: IDBKeyRange.bound(startTime, endTime)}).then(res => {
+        const list = res.filter(ele => ele.userId === userCode)
+        if (!list.length) {
+            alert('没有')
+            return
+        }
+        const workbook = new ExcelJS.Workbook();
+        const sheet = workbook.addWorksheet('日志');
 
+        // 标题键值
+        const keys = ['logTime', 'app_version', 'userId', 'href', 'logType', 'msg', 'deviceInfo',
+            'className', 'tagName', 'innerText',
+            'type', 'afterPage', 'beforePage',
+            'stack', 'message', 'filename', 'typeName', 'sourceUrl',
+            'desc', 'startTimeStr', 'startTime', 'loadTime', 'statusCode', 'url', 'responseText', 'statusText', 'method', 'params',
+        ];
+        // 添加标题
+        sheet.columns = keys.map((item) => {
+            return {
+                header: item,
+                key: item,
+                width: 15,
+                outlineLevel: 1,
+            };
+        });
+
+        // 添加行数据
+        list.reverse().forEach((item) => {
+            sheet.addRow(item);
+        });
+
+        sheet.duplicateRow(1, 1, true);
+        sheet.eachRow(row => {
+            row.height = 15
+        })
+        // todo
+        // sheet.mergeCells('A1:G1');
+        // sheet.mergeCells('H1:J1');
+        // sheet.mergeCells('K1:M1');
+        // sheet.mergeCells('N1:R1');
+        // sheet.mergeCells('S1:AB');
+
+        workbook.xlsx.writeBuffer().then((buffer) => {
+            utils.downLoad(buffer, `${start}-${endTime} 操作日志`);
+        });
+    })
 }
