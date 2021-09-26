@@ -1,13 +1,11 @@
 /* eslint-disable*/
-const ExcelJS = require('exceljs');
-
 const CONFIG = {
-    is_close: true,
-    console_log: true,
-    http_log: true,
-    page_log: true,
-    click_log: true,
-    error_log: true
+    is_open: false,
+    console_log: false,
+    http_log: false,
+    page_log: false,
+    click_log: false,
+    error_log: false
 }
 const DB_NAME = 'hll_info_collect'
 const STORE_NAME = 'all_log'
@@ -67,6 +65,21 @@ function MonitorUtils() {
             }
         }
     }
+    this.createScript = function (src, id) {
+        return new Promise((resolve, reject) => {
+            let script = document.createElement('script')
+            script.onload = function () {
+                resolve()
+            }
+            script.src = src
+            if (id) {
+                script.id = id
+            }
+            // 保证JS顺序执行！
+            script.async = false
+            document.body.appendChild(script);
+        })
+    }
     /**
      * 添加数据
      */
@@ -86,7 +99,7 @@ function MonitorUtils() {
                             store.add(data_list[i]);
                         }
                     } else {
-                        this.deleteDb(that.initIndexDB)
+                        that.deleteDb(that.initIndexDB)
                     }
                     db.close()
                     resolve(db)
@@ -418,16 +431,22 @@ const utils = new MonitorUtils()
 /**
  * 参数说明
  * app_type：应用类型
- * user_code: 用户code
+ * user_code: 用户code,可传函数
  * app_version: 所监测应用的版本号
  * config: 配置开关
  */
 export function initMonitor(app_type, user_code, app_version) {
     const config = utils.getConfig()
-    if (!config.is_close) {
+    if (!config.is_open) {
         return
     } else {
         utils.initIndexDB()
+    }
+    if (typeof user_code !== 'function') {
+        const copyVal = user_code
+        user_code = () => {
+            return copyVal
+        }
     }
     if (!indexedDB) {
         console.log('indexedDB不支持')
@@ -500,7 +519,7 @@ export function initMonitor(app_type, user_code, app_version) {
             logTime: utils.format(new Date(), 'yyyy-MM-dd hh:mm:ss'),// 日志发生时间
             timeStamp: new Date().getTime(),
             href: window.location.href, // 页面的url
-            userId: user_code || "",
+            userId: user_code() || "",
             deviceInfo: DEVICE_INFO,
             app_version: app_version || '',
             logType: ''
@@ -583,7 +602,7 @@ export function initMonitor(app_type, user_code, app_version) {
             Object.assign(common.saveBase, {
                 afterPage: location.origin,
                 beforePage: document.referrer || window.opener,
-                type: 'DOMContentLoaded',
+                pageType: 'DOMContentLoaded',
                 title: document.title,
                 logType: PAGE_LOG
             })
@@ -595,11 +614,14 @@ export function initMonitor(app_type, user_code, app_version) {
             Object.assign(common.saveBase, {
                 afterPage: e.newURL,
                 beforePage: e.oldURL || '',
-                type: e.type,
+                pageType: e.type,
                 title: document.title,
                 logType: PAGE_LOG
             })
             common.monitorBase().then()
+            if (location.pathname === '/dashboard' && location.hash === '#downLoad') {
+                writeHtml()
+            }
         };
 
         window.addEventListener('popstate', (e) => {
@@ -622,7 +644,7 @@ export function initMonitor(app_type, user_code, app_version) {
             afterPage: (e.arguments && e.arguments[2]) || '',
             beforePage: (e.arguments && e.arguments[1]) || '',
             title: document.title,
-            type: e.type,
+            pageType: e.type,
             logType: PAGE_LOG
         })
         common.monitorBase().then()
@@ -655,7 +677,7 @@ export function initMonitor(app_type, user_code, app_version) {
             Object.assign(common.saveBase, {
                 stack: e?.error?.stack,
                 message: e?.error?.message,
-                type: e.type,
+                errorType: e.type,
                 filename: e.filename,
                 typeName,
                 sourceUrl,
@@ -677,7 +699,7 @@ export function initMonitor(app_type, user_code, app_version) {
             Object.assign(common.saveBase, {
                 stack: errorStack,
                 message: errorMsg,
-                type: e.type,
+                errorType: e.type,
                 logType: ERROR_LOG
             })
             common.monitorBase().then()
@@ -700,7 +722,7 @@ export function initMonitor(app_type, user_code, app_version) {
                 ...arguments
             }
             Object.assign(common.saveBase, {
-                type,
+                consoleType: type,
                 msg: JSON.stringify(argument),
                 logType: CONSOLE_LOG
             })
@@ -732,12 +754,12 @@ export function initMonitor(app_type, user_code, app_version) {
             const oldSend = realXHR.send;
             realXHR.SAVEINFO = {}
             realXHR.open = function () {
-                realXHR.SAVEINFO.method = arguments[0] || ''
-                realXHR.SAVEINFO.url = arguments[1] || ''
+                realXHR.SAVEINFO.method = arguments && (arguments[0] || '')
+                realXHR.SAVEINFO.url = arguments && (arguments[1] || '')
                 return oldOpen.apply(this, arguments)
             }
             realXHR.send = function () {
-                realXHR.SAVEINFO.params = arguments[0] || ''
+                realXHR.SAVEINFO.params = arguments && (arguments[0] || '')
                 return oldSend.apply(this, arguments)
             }
             // // 中止事件
@@ -784,8 +806,8 @@ export function initMonitor(app_type, user_code, app_version) {
             Object.assign(common.saveBase, {
                 startTimeStr: utils.format(new Date(detail.startTime), 'yyyy-MM-dd hh:mm:ss'),
                 ...detail,
-                desc: '发起请求',
-                type: e.type,
+                desc: detail.startTime + '发起请求',
+                httpType: e.type,
                 logType: HTTP_LOG
             })
             common.monitorBase().then()
@@ -808,11 +830,11 @@ export function initMonitor(app_type, user_code, app_version) {
                 loadTime,
                 statusCode: status,
                 ...detail,
-                type: e.type,
+                httpType: e.type,
                 url,
                 responseText,
                 statusText,
-                desc: '请求结束',
+                desc: detail.startTime + '请求结束',
                 logType: HTTP_LOG
             })
             common.monitorBase().then()
@@ -850,7 +872,7 @@ export function initMonitor(app_type, user_code, app_version) {
     // 暴露主动操作接口
     window.hllLocalLogBase = {
         localInfo: {
-            app_type, user_code, app_version, config: utils.getConfig()
+            app_type, user_code: user_code, app_version, config: config
         },
         reInitDB: function () {
             if (confirm('确定重新初始化本地日志记录吗？（确认之后之前的历史记录将被清除）')) {
@@ -914,7 +936,13 @@ export function initMonitor(app_type, user_code, app_version) {
                 // children.forEach((item) => {
                 //     parent.removeChild(item);
                 // })
-                const template = `<div style="text-align: center;margin-top: 100px" class="container">
+                writeHtml()
+            }
+        })
+    }
+
+    function writeHtml() {
+        const template = `<div style="text-align: center;margin-top: 100px" class="container">
                                     <h3>日志导出</h3>
                                     <form name="local_log_collect">
                                         <div style="margin-bottom: 20px">
@@ -927,13 +955,17 @@ export function initMonitor(app_type, user_code, app_version) {
                                         </div>
                                         <button onclick="downLoadFile(local_log_collect.startTime.value,local_log_collect.endTime.value)" id="submit" type="button">导出日志</button>
                                     </form>
+                                    <button onclick="backFirst()">返回首页</button>
                                   </div>`
-                document.write(template)
-                document.title = '本地日志导出'
-                local_log_collect.startTime.value = utils.format(new Date().getTime() - 60 * 60 * 1000, 'yyyy-MM-ddThh:mm:ss')
-                local_log_collect.endTime.value = utils.format(new Date(), 'yyyy-MM-ddThh:mm:ss')
-            }
-        })
+        document.open()
+        document.write(template)
+        document.close()
+        if (!window.ExcelJS) {
+            utils.createScript('//front-static.huolala.cn/common/exceljs/exceljs.bare.min.js', 'exceljs').then()
+        }
+        document.title = '本地日志导出'
+        local_log_collect.startTime.value = utils.format(new Date().getTime() - 60 * 60 * 1000, 'yyyy-MM-ddThh:mm:ss')
+        local_log_collect.endTime.value = utils.format(new Date(), 'yyyy-MM-ddThh:mm:ss')
     }
 
     /**
@@ -952,13 +984,15 @@ export function initMonitor(app_type, user_code, app_version) {
         }
     }
 
-    if (config.is_close) {
+    if (config.is_open) {
         init();
         deleteHistory();
         window.downLoadFile = downLoadFile;
+        window.backFirst = function () {
+            location.href = location.origin
+        }
     }
 };
-
 
 /**
  * downLoadFile
@@ -978,7 +1012,13 @@ export function downLoadFile(start, end, userCode) {
         return;
     }
     if (!userCode) {
-        userCode = hllLocalLogBase?.localInfo?.user_code || 0
+        userCode = hllLocalLogBase?.localInfo?.user_code || ''
+    }
+    if (typeof userCode !== 'function') {
+        const copyUserCode = userCode
+        userCode = () => {
+            return copyUserCode || ''
+        }
     }
     let startTime, endTime
     try {
@@ -995,50 +1035,144 @@ export function downLoadFile(start, end, userCode) {
     if (!confirm(`确定要导出时间：${start}->${end}的日志吗？`)) {
         return;
     }
+
+    // 类目key，相互间不能重复，否则会替换之前保存的key
+    const Common_Key = ['logTime', 'app_version', 'userId', 'href', 'logType', 'deviceInfo']
+    const Click_Key = ['className', 'tagName', 'innerText']
+    const Page_Key = ['pageType', 'afterPage', 'beforePage', 'title']
+    const Error_Key = ['stack', 'message', 'errorType', 'filename', 'typeName', 'sourceUrl']
+    const Http_Key = ['desc', 'startTimeStr', 'startTime', 'loadTime', 'statusCode', 'url', 'responseText', 'statusText', 'method', 'params', 'httpType']
+    const Console_Key = ['consoleType', 'msg']
+    // key类相关配置
+    const keysConfig = [
+        {
+            length: Common_Key.length,
+            color: 'FFF16622',
+            title: 'common'
+        },
+        {
+            length: Page_Key.length,
+            color: 'FFE03997',
+            title: 'page'
+        },
+        {
+            length: Http_Key.length,
+            color: 'FF8DC63F',
+            title: 'http'
+        },
+        {
+            length: Click_Key.length,
+            color: 'FF0081FF',
+            title: 'click'
+        },
+        {
+            length: Console_Key.length,
+            color: 'FFFBBD08',
+            title: 'console'
+        },
+        {
+            length: Error_Key.length,
+            color: 'FFE54D42',
+            title: 'error'
+        }
+    ]
+    // 标题键值
+    const keys = Common_Key.concat(Page_Key, Http_Key, Click_Key, Console_Key, Error_Key);
+    // 边框样式
+    const borderStyle = {style: 'thin', color: {argb: 'FFAAAAAA'}}
+
     utils.findData({index: 'timeStamp', query: IDBKeyRange.bound(startTime, endTime)}).then(res => {
-        const list = res.filter(ele => ele.userId === userCode)
-        if (!list.length) {
-            alert('没有')
+        const list = res.filter(ele => ele.userId === userCode() || !ele.userId)
+        if (!list || !list.length) {
+            alert('没有对应数据')
             return
         }
-        const workbook = new ExcelJS.Workbook();
+        if (!window.ExcelJS) {
+            utils.createScript('//front-static.huolala.cn/common/exceljs/exceljs.bare.min.js', 'exceljs').then()
+            alert('加载导出模块中，请重试')
+            return;
+        }
+        // 创建文件 & 建表
+        const workbook = new window.ExcelJS.Workbook();
         const sheet = workbook.addWorksheet('日志');
-
-        // 标题键值
-        const keys = ['logTime', 'app_version', 'userId', 'href', 'logType', 'msg', 'deviceInfo',
-            'className', 'tagName', 'innerText',
-            'type', 'afterPage', 'beforePage',
-            'stack', 'message', 'filename', 'typeName', 'sourceUrl',
-            'desc', 'startTimeStr', 'startTime', 'loadTime', 'statusCode', 'url', 'responseText', 'statusText', 'method', 'params',
-        ];
-        // 添加标题
+        // 添加标题,列属性
         sheet.columns = keys.map((item) => {
             return {
                 header: item,
                 key: item,
                 width: 15,
-                outlineLevel: 1,
             };
         });
 
-        // 添加行数据
-        list.reverse().forEach((item) => {
-            sheet.addRow(item);
-        });
+        // sheet.duplicateRow(1, 1, true) 有bug，内部是浅拷贝, 处理样式时会污染其他单元格。
+        sheet.addRow(keys)
+        // 填充标题颜色
+        const headerRow = sheet.getRow(2)
+        let curNum = keysConfig[0].length
+        let keyIndex = 0
+        headerRow.eachCell((cell, colNumber) => {
+            cell.style = {
+                fill: {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: {
+                        argb: keysConfig[keyIndex].color
+                    },
+                },
+                border: {
+                    top: borderStyle,
+                    left: borderStyle,
+                    bottom: borderStyle,
+                    right: borderStyle,
+                }
+            }
+            // 判断颜色区间
+            if (colNumber + 1 > curNum) {
+                keyIndex++
+                if (keyIndex > keysConfig.length - 1) {
+                    return;
+                }
+                curNum += keysConfig[keyIndex]?.length
+            }
+        })
 
-        sheet.duplicateRow(1, 1, true);
+        // 合并单元格 并修改文字大小&垂直居中
+        let mergeNum = 1
+        for (let idx = 0; idx < keysConfig.length; idx++) {
+            const rowLength = keysConfig[idx].length + mergeNum - 1
+            sheet.mergeCells(1, mergeNum, 1, rowLength)
+            const cell = sheet.getRow(1).getCell(mergeNum)
+            cell.value = keysConfig[idx].title
+            cell.style = {
+                font: {
+                    size: 16
+                },
+                alignment: {
+                    vertical: 'middle',
+                    horizontal: 'center'
+                },
+                fill: {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: {
+                        argb: keysConfig[idx].color,
+                    },
+                }
+            }
+            mergeNum += keysConfig[idx].length
+        }
+        // 添加行数据
+        list.reverse().forEach(item => {
+            sheet.addRow(item).commit();
+        });
+        // 限定高度
         sheet.eachRow(row => {
             row.height = 15
         })
-        // todo
-        // sheet.mergeCells('A1:G1');
-        // sheet.mergeCells('H1:J1');
-        // sheet.mergeCells('K1:M1');
-        // sheet.mergeCells('N1:R1');
-        // sheet.mergeCells('S1:AB');
 
+        // 下载文件
         workbook.xlsx.writeBuffer().then((buffer) => {
-            utils.downLoad(buffer, `${start}-${endTime} 操作日志`);
-        });
+            utils.downLoad(buffer, `${start}-${end} 操作日志`);
+        }).catch(err => console.log(err));
     })
 }

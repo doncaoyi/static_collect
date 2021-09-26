@@ -2,7 +2,6 @@
 import babel from 'rollup-plugin-babel';
 import {uglify} from 'rollup-plugin-uglify';
 import commonjs from 'rollup-plugin-commonjs';
-import livereload from 'rollup-plugin-livereload';
 import json from 'rollup-plugin-json';
 import resolve from 'rollup-plugin-node-resolve';
 
@@ -21,12 +20,11 @@ export default {
                     'dist',
                 ],
             },
+            browser: true
         }),
         json(),
         commonjs(),
         babel({exclude: 'node_modules/**'}),
-        // uglify(),
-        // 热更新 默认监听根文件夹
-        livereload()
+        uglify()
     ],
 };
