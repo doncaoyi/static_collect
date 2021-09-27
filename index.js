@@ -1,14 +1,6 @@
-/* eslint-disable*/
-const CONFIG = {
-    is_open: false,
-    console_log: false,
-    http_log: false,
-    page_log: false,
-    click_log: false,
-    error_log: false
-}
-const DB_NAME = 'hll_info_collect'
-const STORE_NAME = 'all_log'
+import {MonitorUtils, CONFIG} from './utils'
+
+const utils = new MonitorUtils()
 const
     PAGE_LOG = 'PAGE_LOG'
 
@@ -25,432 +17,32 @@ const
     , CONSOLE_LOG = 'CONSOLE_LOG'
 
 /**
- * IndexDB相关函数
- */
-
-const onupgradeneeded = function () {//更改数据库，或者存储对象时候在这里处理
-    console.log('onupgradeneeded')
-    let db = this.result;
-    if (!db.objectStoreNames.contains(STORE_NAME)) {
-        let store = db.createObjectStore(STORE_NAME, {autoIncrement: true});
-        store.createIndex('timeStamp', 'timeStamp', {unique: true});
-        store.createIndex('userId', 'userId', {unique: false});
-        store.createIndex('logType', 'logType', {unique: false});
-    }
-};
-
-/**
- * 监控代码需要的工具类
- */
-function MonitorUtils() {
-    let that = this
-    this.getUuid = function () {
-        let timeStamp = new Date().getTime()
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-            let r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-        }) + "-" + timeStamp;
-    };
-    /**
-     * 重写页面的onload事件
-     */
-    this.addLoadEvent = function (func) {
-        let oldOnload = window.onload; //把现在有window.onload事件处理函数的值存入变量oldonload。
-        if (typeof oldOnload != 'function') { //如果这个处理函数还没有绑定任何函数，就像平时那样把新函数添加给它
-            window.onload = func;
-        } else { //如果在这个处理函数上已经绑定了一些函数。就把新函数追加到现有指令的末尾
-            window.onload = function () {
-                oldOnload();
-                func();
-            }
-        }
-    }
-    this.createScript = function (src, id) {
-        return new Promise((resolve, reject) => {
-            let script = document.createElement('script')
-            script.onload = function () {
-                resolve()
-            }
-            script.src = src
-            if (id) {
-                script.id = id
-            }
-            // 保证JS顺序执行！
-            script.async = false
-            document.body.appendChild(script);
-        })
-    }
-    /**
-     * 添加数据
-     */
-    this.addData = function (data_list) {
-        return new Promise((resolve, reject) => {
-            let openRequest = indexedDB.open(DB_NAME, 1);
-            openRequest.onerror = function (e) {//当创建数据库失败时候的回调
-                reject(e)
-            };
-            openRequest.onsuccess = function () {
-                try {
-                    let db = openRequest.result; //创建数据库成功时候，将结果给db，此时db就是当前数据库
-                    if (db.objectStoreNames.contains(STORE_NAME)) {
-                        let transaction = db.transaction(STORE_NAME, 'readwrite');
-                        let store = transaction.objectStore(STORE_NAME);
-                        for (let i = 0; i < data_list.length; i++) {
-                            store.add(data_list[i]);
-                        }
-                    } else {
-                        that.deleteDb(that.initIndexDB)
-                    }
-                    db.close()
-                    resolve(db)
-                } catch (e) {
-                    reject(e)
-                }
-            };
-        })
-    }
-    this.deleteDb = function (fn) {
-        let DBDeleteRequest = window.indexedDB.deleteDatabase(DB_NAME);
-        DBDeleteRequest.onsuccess = function (event) {
-            fn()
-        };
-    }
-
-    /**
-     * 查找数据
-     * index：索引或者主键
-     * query：范围
-     * storage_list：保存找到数据的数组
-     */
-    this.findData = function ({index, query = null} = {}, storage_list = []) {
-        return new Promise((resolve, reject) => {
-            let openRequest = indexedDB.open(DB_NAME, 1);
-            let db;
-            openRequest.onerror = (e) => {//当创建数据库失败时候的回调
-                reject(e)
-            };
-            openRequest.onsuccess = () => {
-                try {
-                    db = openRequest.result; //创建数据库成功时候，将结果给db，此时db就是当前数据库
-                    if (db.objectStoreNames.contains(STORE_NAME)) {
-                        const transaction = db.transaction(STORE_NAME, 'readonly');
-                        const objectStore = transaction.objectStore(STORE_NAME);
-                        const target = index ? objectStore.index(index) : objectStore;
-                        const cursor = target.openCursor(query);
-                        cursor.onsuccess = (e) => {
-                            let res = e.target.result;
-                            if (res) {
-                                let obj = {
-                                    primaryKey: res.primaryKey
-                                }
-                                Object.assign(obj, res.value)
-                                storage_list.push(obj);
-                                res.continue();
-                            } else {
-                                db.close()
-                                resolve(storage_list)
-                                return storage_list
-                            }
-                        }
-                        cursor.onerror = function (e) {
-                            reject(e)
-                        }
-                    }
-                } catch (e) {
-                    reject(e)
-                }
-            };
-        })
-    }
-
-    // 批量删除数据
-    this.deleteDataById = function (value) {
-        return new Promise((resolve, reject) => {
-            let openRequest = indexedDB.open(DB_NAME);
-            let db;
-            openRequest.onerror = (e) => {//当创建数据库失败时候的回调
-                reject(e)
-            };
-            openRequest.onsuccess = function () {
-                try {
-                    db = openRequest.result; //创建数据库成功时候，将结果给db，此时db就是当前数据库
-                    if (db.objectStoreNames.contains(STORE_NAME)) {
-                        let transaction = db.transaction(STORE_NAME, 'readwrite');
-                        let objectStore = transaction.objectStore(STORE_NAME);
-                        let request = objectStore.delete(Number(value));//根据查找出来的id，再次逐个查找
-                        request.onsuccess = function () {
-                            resolve('success')
-                        }
-                        request.onerror = function (e) {
-                            reject(e)
-                        }
-                        db.close()
-                    }
-                } catch (e) {
-                    reject(e)
-                }
-            }
-        })
-    }
-    this.initIndexDB = function () {
-        //调用 open 方法并传递数据库名称。如果不存在具有指定名称的数据库，则会创建该数据库
-        let openRequest = indexedDB.open(DB_NAME, 1);
-        openRequest.onerror = function (e) {
-            console.log("Database error: ", e);
-        };
-        openRequest.onupgradeneeded = onupgradeneeded
-    }
-    this.getConfig = function () {
-        try {
-            return (JSON.parse(localStorage.getItem('localLogConfig')) || CONFIG)
-        } catch (e) {
-            return CONFIG
-        }
-    }
-    /**
-     * 封装简易的ajax请求
-     * @param method  请求类型(大写)  GET/POST
-     * @param url     请求URL
-     * @param param   请求参数
-     * @param successCallback  成功回调方法
-     * @param failCallback   失败回调方法
-     */
-    this.ajax = function (method, url, param, successCallback, failCallback) {
-        let xmlHttp = window.XMLHttpRequest ? new XMLHttpRequest() : new ActiveXObject('Microsoft.XMLHTTP');
-        xmlHttp.open(method, url, true);
-        xmlHttp.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-        xmlHttp.onreadystatechange = function () {
-            if (xmlHttp.readyState == 4 && xmlHttp.status == 200) {
-                let res = JSON.parse(xmlHttp.responseText);
-                typeof successCallback == 'function' && successCallback(res);
-            } else {
-                typeof failCallback == 'function' && failCallback();
-            }
-        };
-        xmlHttp.send("data=" + JSON.stringify(param));
-    }
-    /**
-     * js处理截图
-     */
-    this.screenShot = function (cntElem, description) {
-        let shareContent = cntElem;//需要截图的包裹的（原生的）DOM 对象
-        let width = shareContent.offsetWidth; //获取dom 宽度
-        let height = shareContent.offsetHeight; //获取dom 高度
-        let canvas = document.createElement("canvas"); //创建一个canvas节点
-        let scale = 0.3; //定义任意放大倍数 支持小数
-        canvas.style.display = "none";
-        canvas.width = width * scale; //定义canvas 宽度 * 缩放
-        canvas.height = height * scale; //定义canvas高度 *缩放
-        canvas.getContext("2d").scale(scale, scale); //获取context,设置scale
-        let opts = {
-            scale: scale, // 添加的scale 参数
-            canvas: canvas, //自定义 canvas
-            logging: false, //日志开关，便于查看html2canvas的内部执行流程
-            width: width, //dom 原始宽度
-            height: height,
-            useCORS: true // 【重要】开启跨域配置
-        };
-        window.html2canvas && window.html2canvas(cntElem, opts).then(function (canvas) {
-            let dataURL = canvas.toDataURL("image/webp");
-            let tempCompress = dataURL.replace("data:image/webp;base64,", "");
-            let compressedDataURL = utils.b64EncodeUnicode(tempCompress);
-            let screenShotInfo = new ScreenShotInfo(SCREEN_SHOT, description, compressedDataURL)
-            // screenShotInfo.handleLogInfo(SCREEN_SHOT, screenShotInfo);
-        });
-    }
-    this.downLoad = function (buff, fileName = '操作日志') {
-        const filename = `${fileName}.xlsx`;
-        const blobContent = new Blob([buff], {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        });
-        const blobUrl = window.URL.createObjectURL(blobContent);
-
-        const eleLink = document.createElement('a');
-        eleLink.download = filename;
-        eleLink.style.display = 'none';
-        eleLink.href = blobUrl;
-        document.body.appendChild(eleLink);
-        eleLink.click();
-        document.body.removeChild(eleLink);
-    }
-    this.getDevice = function () {
-        let device = {};
-        let ua = navigator.userAgent;
-        let android = ua.match(/(Android);?[\s\/]+([\d.]+)?/);
-        let ipad = ua.match(/(iPad).*OS\s([\d_]+)/);
-        let ipod = ua.match(/(iPod)(.*OS\s([\d_]+))?/);
-        let iphone = !ipad && ua.match(/(iPhone\sOS)\s([\d_]+)/);
-        let mobileInfo = ua.match(/Android\s[\S\s]+Build\//);
-        device.ios = device.android = device.iphone = device.ipad = device.androidChrome = false;
-        device.isWeixin = /MicroMessenger/i.test(ua);
-        device.os = "web";
-        device.deviceName = "PC";
-        // Android
-        if (android) {
-            device.os = 'android';
-            device.osVersion = android[2];
-            device.android = true;
-            device.androidChrome = ua.toLowerCase().indexOf('chrome') >= 0;
-        }
-        if (ipad || iphone || ipod) {
-            device.os = 'ios';
-            device.ios = true;
-        }
-        // iOS
-        if (iphone && !ipod) {
-            device.osVersion = iphone[2].replace(/_/g, '.');
-            device.iphone = true;
-        }
-        if (ipad) {
-            device.osVersion = ipad[2].replace(/_/g, '.');
-            device.ipad = true;
-        }
-        if (ipod) {
-            device.osVersion = ipod[3] ? ipod[3].replace(/_/g, '.') : null;
-            device.iphone = true;
-        }
-        // iOS 8+ changed UA
-        if (device.ios && device.osVersion && ua.indexOf('Version/') >= 0) {
-            if (device.osVersion.split('.')[0] === '10') {
-                device.osVersion = ua.toLowerCase().split('version/')[1].split(' ')[0];
-            }
-        }
-
-        // 如果是ios, deviceName 就设置为iphone，根据分辨率区别型号
-        if (device.iphone) {
-            device.deviceName = "iphone";
-            let screenWidth = window.screen.width;
-            let screenHeight = window.screen.height;
-            if (screenWidth === 320 && screenHeight === 480) {
-                device.deviceName = "iphone 4";
-            } else if (screenWidth === 320 && screenHeight === 568) {
-                device.deviceName = "iphone 5/SE";
-            } else if (screenWidth === 375 && screenHeight === 667) {
-                device.deviceName = "iphone 6/7/8";
-            } else if (screenWidth === 414 && screenHeight === 736) {
-                device.deviceName = "iphone 6/7/8 Plus";
-            } else if (screenWidth === 375 && screenHeight === 812) {
-                device.deviceName = "iphone X/S/Max";
-            }
-        } else if (device.ipad) {
-            device.deviceName = "ipad";
-        } else if (mobileInfo) {
-            let info = mobileInfo[0];
-            let deviceName = info.split(';')[1].replace(/Build\//g, "");
-            device.deviceName = deviceName.replace(/(^\s*)|(\s*$)/g, "");
-        }
-        // 浏览器模式, 获取浏览器信息
-        if (ua.indexOf("Mobile") == -1) {
-            let agent = navigator.userAgent.toLowerCase();
-            let regStr_ie = /msie [\d.]+;/gi;
-            let regStr_ff = /firefox\/[\d.]+/gi
-            let regStr_chrome = /chrome\/[\d.]+/gi;
-            let regStr_saf = /safari\/[\d.]+/gi;
-
-            device.browserName = '未知';
-            //IE
-            if (agent.indexOf("msie") > 0) {
-                let browserInfo = agent.match(regStr_ie)[0];
-                device.browserName = browserInfo.split('/')[0];
-                device.browserVersion = browserInfo.split('/')[1];
-            }
-            //firefox
-            if (agent.indexOf("firefox") > 0) {
-                let browserInfo = agent.match(regStr_ff)[0];
-                device.browserName = browserInfo.split('/')[0];
-                device.browserVersion = browserInfo.split('/')[1];
-            }
-            //Safari
-            if (agent.indexOf("safari") > 0 && agent.indexOf("chrome") < 0) {
-                let browserInfo = agent.match(regStr_saf)[0];
-                device.browserName = browserInfo.split('/')[0];
-                device.browserVersion = browserInfo.split('/')[1];
-            }
-            //Chrome
-            if (agent.indexOf("chrome") > 0) {
-                let browserInfo = agent.match(regStr_chrome)[0];
-                device.browserName = browserInfo.split('/')[0];
-                device.browserVersion = browserInfo.split('/')[1];
-            }
-        }
-        // Webview
-        device.webView = (iphone || ipad || ipod) && ua.match(/.*AppleWebKit(?!.*Safari)/i);
-
-        // Export object
-        return {
-            deviceName: device.deviceName,
-            os: device.os + (device.osVersion ? " " + device.osVersion : ""),
-            browserName: device.browserName,
-            browserVersion: device.browserVersion
-        };
-
-    }
-    this.loadJs = function (url, callback) {
-        let script = document.createElement('script');
-        script.async = 1;
-        script.src = url;
-        script.onload = callback;
-        let dom = document.getElementsByTagName('script')[0];
-        dom.parentNode.insertBefore(script, dom);
-        return dom;
-    }
-    this.b64EncodeUnicode = function (str) {
-        try {
-            return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function (match, p1) {
-                return String.fromCharCode("0x" + p1);
-            }));
-        } catch (e) {
-            return str;
-        }
-    }
-    this.format = function (date, fmt) {
-        if (!(date instanceof Date)) {
-            date = new Date(date)
-        }
-        if (isNaN(date.getTime())) {
-            return NaN
-        }
-        let o = {
-            "M+": date.getMonth() + 1, //月份
-            "d+": date.getDate(), //日
-            "h+": date.getHours(), //小时
-            "m+": date.getMinutes(), //分
-            "s+": date.getSeconds(), //秒
-            "q+": Math.floor((date.getMonth() + 3) / 3), //季度
-            "S": date.getMilliseconds() //毫秒
-        };
-        if (/(y+)/.test(fmt)) fmt = fmt.replace(RegExp.$1, (date.getFullYear() + "").substr(4 - RegExp.$1.length));
-        for (let k in o)
-            if (new RegExp("(" + k + ")").test(fmt)) fmt = fmt.replace(RegExp.$1, (RegExp.$1.length == 1) ? (o[k]) : (("00" + o[k]).substr(("" + o[k]).length)));
-        return fmt;
-    }
-}
-
-const utils = new MonitorUtils()
-
-/**
  * 参数说明
  * app_type：应用类型
  * user_code: 用户code,可传函数
  * app_version: 所监测应用的版本号
  * config: 配置开关
  */
-export function initMonitor(app_type, user_code, app_version) {
+export function initMonitor(app_type, user_code, app_version, oriConfig = CONFIG) {
+    if (!indexedDB) {
+        console.log('indexedDB不支持')
+        return;
+    }
     const config = utils.getConfig()
-    if (!config.is_open) {
-        return
-    } else {
+    if (config.is_open && oriConfig.is_open) {
         utils.initIndexDB()
+    } else {
+        return
+    }
+    let http_black_list = oriConfig.http_black_list
+    if (!Array.isArray(http_black_list)) {
+        http_black_list = [http_black_list]
     }
     if (typeof user_code !== 'function') {
         const copyVal = user_code
         user_code = () => {
             return copyVal
         }
-    }
-    if (!indexedDB) {
-        console.log('indexedDB不支持')
-        return;
     }
     // let
     // 屏幕截图字符串
@@ -596,6 +188,7 @@ export function initMonitor(app_type, user_code, app_version) {
      * @param project 项目详情
      */
     function recordLoadPage() {
+        let beforePage = ''
         window.addEventListener('DOMContentLoaded', function () {
             console.log('DOMContentLoaded')
             let common = new commonRecord();
@@ -607,34 +200,47 @@ export function initMonitor(app_type, user_code, app_version) {
                 logType: PAGE_LOG
             })
             common.monitorBase().then()
+            beforePage = location.pathname + location.hash
         })
         // hash方式，同时可以可以监测到参数
-        window.onhashchange = function (e) {
+        // window.onhashchange = function (e) {
+        //     console.log('onhashchange',e)
+        //     let common = new commonRecord();
+        //     Object.assign(common.saveBase, {
+        //         afterPage: e.newURL,
+        //         beforePage: e.oldURL || '',
+        //         pageType: e.type,
+        //         title: document.title,
+        //         logType: PAGE_LOG
+        //     })
+        //     common.monitorBase().then()
+        //     afterPage = location.pathname + location.hash
+        // };
+        window.addEventListener('popstate', (e) => {
             let common = new commonRecord();
             Object.assign(common.saveBase, {
-                afterPage: e.newURL,
-                beforePage: e.oldURL || '',
-                pageType: e.type,
+                afterPage: location.pathname || '',
+                beforePage,
                 title: document.title,
+                pageType: e.type,
                 logType: PAGE_LOG
             })
             common.monitorBase().then()
+            beforePage = location.pathname + location.hash
             if (location.pathname === '/dashboard' && location.hash === '#downLoad') {
                 writeHtml()
             }
-        };
-
-        window.addEventListener('popstate', (e) => {
-            setState(e)
         })
         // history模式的路由监控
         history.pushState = coverHistory('pushState');
         history.replaceState = coverHistory('replaceState');
         window.addEventListener('pushState', (e) => {
-            setState(e)
+            beforePage = (e.arguments && e.arguments[2]) || '',
+                setState(e)
         })
         window.addEventListener('replaceState', (e) => {
-            setState(e)
+            beforePage = (e.arguments && e.arguments[2]) || '',
+                setState(e)
         })
     }
 
@@ -642,7 +248,7 @@ export function initMonitor(app_type, user_code, app_version) {
         let common = new commonRecord();
         Object.assign(common.saveBase, {
             afterPage: (e.arguments && e.arguments[2]) || '',
-            beforePage: (e.arguments && e.arguments[1]) || '',
+            beforePage: location.pathname || '',
             title: document.title,
             pageType: e.type,
             logType: PAGE_LOG
@@ -759,7 +365,14 @@ export function initMonitor(app_type, user_code, app_version) {
                 return oldOpen.apply(this, arguments)
             }
             realXHR.send = function () {
-                realXHR.SAVEINFO.params = arguments && (arguments[0] || '')
+                const saveInfo = this.SAVEINFO
+                if (saveInfo.method.toLowerCase() === 'get') {
+                    const list = saveInfo.url.split('?') || []
+                    saveInfo.url = list[0] || ''
+                    saveInfo.params = list[1] || ''
+                } else {
+                    saveInfo.params = arguments && (arguments[0] || '')
+                }
                 return oldSend.apply(this, arguments)
             }
             // // 中止事件
@@ -802,6 +415,15 @@ export function initMonitor(app_type, user_code, app_version) {
 
         window.addEventListener('ajaxLoadStart', function (e) {
             const detail = e.detail.SAVEINFO;
+            if (http_black_list.some((item) => {
+                try {
+                    return detail.url.includes(item)
+                } catch (e) {
+                    return false
+                }
+            })) {
+                return
+            }
             const common = new commonRecord();
             Object.assign(common.saveBase, {
                 startTimeStr: utils.format(new Date(detail.startTime), 'yyyy-MM-dd hh:mm:ss'),
@@ -813,11 +435,20 @@ export function initMonitor(app_type, user_code, app_version) {
             common.monitorBase().then()
         })
         window.addEventListener('ajaxLoadEnd', function (e) {
+            const detail = e.detail.SAVEINFO;
+            if (http_black_list.some((item) => {
+                try {
+                    return detail.url.includes(item)
+                } catch (e) {
+                    return false
+                }
+            })) {
+                return
+            }
             let currentTime = new Date().getTime()
             let url = e.detail.responseURL;
             let responseText = e.detail.responseText;
             let status = e.detail.status;
-            const detail = e.detail.SAVEINFO;
             let statusText = e.detail.statusText;
             let loadTime = currentTime - detail.startTime;
             let common = new commonRecord();
@@ -872,7 +503,7 @@ export function initMonitor(app_type, user_code, app_version) {
     // 暴露主动操作接口
     window.hllLocalLogBase = {
         localInfo: {
-            app_type, user_code: user_code, app_version, config: config
+            app_type, user_code: user_code, app_version, config: config, paramsConfig: oriConfig
         },
         reInitDB: function () {
             if (confirm('确定重新初始化本地日志记录吗？（确认之后之前的历史记录将被清除）')) {
@@ -974,17 +605,17 @@ export function initMonitor(app_type, user_code, app_version) {
     function init() {
         try {
             // 启动监控
-            config.page_log && recordLoadPage();
-            config.click_log && recordBehavior();
-            config.error_log && recordJavaScriptError();
-            config.http_log && recordHttpLog();
-            config.console_log && recordConsole();
+            oriConfig.page_log && config.page_log && recordLoadPage();
+            oriConfig.page_log && config.click_log && recordBehavior();
+            oriConfig.page_log && config.error_log && recordJavaScriptError();
+            oriConfig.page_log && config.http_log && recordHttpLog();
+            oriConfig.page_log && config.console_log && recordConsole();
         } catch (e) {
             console.error("监控代码异常，捕获", e);
         }
     }
 
-    if (config.is_open) {
+    if (oriConfig.is_open && config.is_open) {
         init();
         deleteHistory();
         window.downLoadFile = downLoadFile;
@@ -1036,54 +667,9 @@ export function downLoadFile(start, end, userCode) {
         return;
     }
 
-    // 类目key，相互间不能重复，否则会替换之前保存的key
-    const Common_Key = ['logTime', 'app_version', 'userId', 'href', 'logType', 'deviceInfo']
-    const Click_Key = ['className', 'tagName', 'innerText']
-    const Page_Key = ['pageType', 'afterPage', 'beforePage', 'title']
-    const Error_Key = ['stack', 'message', 'errorType', 'filename', 'typeName', 'sourceUrl']
-    const Http_Key = ['desc', 'startTimeStr', 'startTime', 'loadTime', 'statusCode', 'url', 'responseText', 'statusText', 'method', 'params', 'httpType']
-    const Console_Key = ['consoleType', 'msg']
-    // key类相关配置
-    const keysConfig = [
-        {
-            length: Common_Key.length,
-            color: 'FFF16622',
-            title: 'common'
-        },
-        {
-            length: Page_Key.length,
-            color: 'FFE03997',
-            title: 'page'
-        },
-        {
-            length: Http_Key.length,
-            color: 'FF8DC63F',
-            title: 'http'
-        },
-        {
-            length: Click_Key.length,
-            color: 'FF0081FF',
-            title: 'click'
-        },
-        {
-            length: Console_Key.length,
-            color: 'FFFBBD08',
-            title: 'console'
-        },
-        {
-            length: Error_Key.length,
-            color: 'FFE54D42',
-            title: 'error'
-        }
-    ]
-    // 标题键值
-    const keys = Common_Key.concat(Page_Key, Http_Key, Click_Key, Console_Key, Error_Key);
-    // 边框样式
-    const borderStyle = {style: 'thin', color: {argb: 'FFAAAAAA'}}
-
-    utils.findData({index: 'timeStamp', query: IDBKeyRange.bound(startTime, endTime)}).then(res => {
+    utils.findData({ index: 'timeStamp', query: IDBKeyRange.bound(startTime, endTime) }).then(res => {
         const list = res.filter(ele => ele.userId === userCode() || !ele.userId)
-        if (!list || !list.length) {
+        if (!list.length) {
             alert('没有对应数据')
             return
         }
@@ -1092,31 +678,87 @@ export function downLoadFile(start, end, userCode) {
             alert('加载导出模块中，请重试')
             return;
         }
-        // 创建文件 & 建表
-        const workbook = new window.ExcelJS.Workbook();
-        const sheet = workbook.addWorksheet('日志');
-        // 添加标题,列属性
-        sheet.columns = keys.map((item) => {
-            return {
-                header: item,
-                key: item,
-                width: 15,
-            };
-        });
 
-        // sheet.duplicateRow(1, 1, true) 有bug，内部是浅拷贝, 处理样式时会污染其他单元格。
-        sheet.addRow(keys)
-        // 填充标题颜色
-        const headerRow = sheet.getRow(2)
-        let curNum = keysConfig[0].length
-        let keyIndex = 0
-        headerRow.eachCell((cell, colNumber) => {
-            cell.style = {
+
+        // 类目key，相互间不能重复，否则会替换之前保存的key
+        const logKeysConfig = [{
+            key: 'logTime',
+            width: 20,
+        }, {
+            key: 'href',
+            width: 30,
+        }, {
+            key: 'logType',
+            width: 15,
+        }, {
+            key: 'details',
+            width: 50,
+        }, {
+            key: 'app_version',
+            width: 10,
+        }, {
+            key: 'userId',
+            width: 7,
+        }]
+        const deviceInfoKeys = ['deviceName', 'os', 'browserName', 'browserVersion']
+        const PAGE_LOG_COLOR = 'FFE03997',
+            HTTP_LOG_COLOR = 'FF8DC63F',
+            ERROR_LOG_COLOR = 'FFE54D42',
+            CLICK_LOG_COLOR = 'FF0081FF',
+            CONSOLE_LOG_COLOR = 'FFFBBD08',
+            DEFAULT_COLOR = 'FFF16622'
+        // 边框样式
+        const borderStyle = { style: 'thin', color: { argb: 'FFAAAAAA' } }
+
+        // 建表 & 添加标题
+        function getSheets(wb, sheetsName, config) {
+            const sheets = wb.addWorksheet(sheetsName)
+            sheets.columns = config.map(item => {
+                return {
+                    header: typeof item === 'string' ? item : item.key,
+                    key: typeof item === 'string' ? item : item.key,
+                    width: typeof item === 'string' ? 15 : item.width,
+                };
+            })
+            return sheets
+        }
+
+        /**
+         * 获取deviceInfo,
+         * @returns Array
+         */
+        function getDeviceInfo(arr) {
+            const arrLen = arr.length
+            if (arrLen === 1) {
+                return arr
+            }
+            const firstDeviceInfo = arr[0],
+                lastDeviceInfo = arr[arrLen - 1];
+            // 首尾版本一致，无版本升级
+            if (lastDeviceInfo.deviceInfo?.browserVersion === firstDeviceInfo.deviceInfo?.browserVersion) {
+                return [lastDeviceInfo.deviceInfo]
+            }
+            // 双指针取出所有不一致的版本
+            const returnList = []
+            returnList.push(firstDeviceInfo.deviceInfo)
+            for (let i = 1; i < arrLen; i++) {
+                if (arr[i - 1].deviceInfo?.browserVersion !== arr[i].deviceInfo?.browserVersion) {
+                    const clone = JSON.parse(JSON.stringify(arr[i]))
+                    clone.deviceInfo.browserVersion += clone?.logTime
+                    returnList.push(arr[i].deviceInfo?.browserVersion)
+                }
+            }
+            return returnList
+        }
+
+        // 样式处理
+        function getStyle(color = 'FFF16622') {
+            return {
                 fill: {
                     type: 'pattern',
                     pattern: 'solid',
                     fgColor: {
-                        argb: keysConfig[keyIndex].color
+                        argb: color
                     },
                 },
                 border: {
@@ -1126,48 +768,58 @@ export function downLoadFile(start, end, userCode) {
                     right: borderStyle,
                 }
             }
-            // 判断颜色区间
-            if (colNumber + 1 > curNum) {
-                keyIndex++
-                if (keyIndex > keysConfig.length - 1) {
-                    return;
-                }
-                curNum += keysConfig[keyIndex]?.length
-            }
+        }
+
+        // 创建文件 & 建表
+        const workbook = new window.ExcelJS.Workbook();
+        const logSheet = getSheets(workbook, 'log日志', logKeysConfig);
+        const deviceInfoSheet = getSheets(workbook, '设备信息', deviceInfoKeys);
+
+        // 添加行数据
+        // deviceInfoSheet 做判断是否有浏览器升级，有则放入不同的信息
+        getDeviceInfo(list).forEach(info => {
+            deviceInfoSheet.addRow(info)
+        })
+        // log表
+        list.reverse().forEach(item => {
+            const {logTime, app_version, userId, href, logType, deviceInfo, ...details} = item
+            // 移除不显示的属性
+            delete details.primaryKey
+            delete details.timeStamp
+            logSheet.addRow({
+                logTime, app_version, userId, href, logType, details
+            })
+        });
+
+        // log表头部上色
+        logSheet.getRow(1).eachCell(cell => {
+            cell.style = getStyle()
         })
 
-        // 合并单元格 并修改文字大小&垂直居中
-        let mergeNum = 1
-        for (let idx = 0; idx < keysConfig.length; idx++) {
-            const rowLength = keysConfig[idx].length + mergeNum - 1
-            sheet.mergeCells(1, mergeNum, 1, rowLength)
-            const cell = sheet.getRow(1).getCell(mergeNum)
-            cell.value = keysConfig[idx].title
-            cell.style = {
-                font: {
-                    size: 16
-                },
-                alignment: {
-                    vertical: 'middle',
-                    horizontal: 'center'
-                },
-                fill: {
-                    type: 'pattern',
-                    pattern: 'solid',
-                    fgColor: {
-                        argb: keysConfig[idx].color,
-                    },
-                }
+        // log表logtype做颜色区分
+        logSheet.getColumn('logType').eachCell(cell => {
+            let color
+            switch (cell.value) {
+                case PAGE_LOG:
+                    color = PAGE_LOG_COLOR
+                    break;
+                case HTTP_LOG:
+                    color = HTTP_LOG_COLOR
+                    break;
+                case ERROR_LOG:
+                    color = ERROR_LOG_COLOR
+                    break;
+                case CLICK_LOG:
+                    color = CLICK_LOG_COLOR
+                    break;
+                case CONSOLE_LOG:
+                    color = CONSOLE_LOG_COLOR
+                    break;
+                default:
+                    color = DEFAULT_COLOR
+                    break;
             }
-            mergeNum += keysConfig[idx].length
-        }
-        // 添加行数据
-        list.reverse().forEach(item => {
-            sheet.addRow(item).commit();
-        });
-        // 限定高度
-        sheet.eachRow(row => {
-            row.height = 15
+            cell.style = getStyle(color)
         })
 
         // 下载文件
