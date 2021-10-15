@@ -21,7 +21,7 @@ initMonitor("O", "1234", "1.0.0");
 
 本地日志记录默认开启状态，需要所监测项目配置 配置信息写到*localStorage* 的'localLogConfig'中 配置信息数据结构如下（每个字段对应一个监控模块）总开关字段：is_close http_black_list:
 配置的http请求黑名单（不会监听名单的请求），填写字符路径例如：
-['coupe.work/schema/','/api/xxx/xxx']
+['xxxxxxx','/api/xxx/xxx']
 
 ```
 const CONFIG = {
@@ -34,8 +34,6 @@ const CONFIG = {
    http_black_list: []
 }
 ```
-
-[飞书文档地址](https://huolala.feishu.cn/wiki/wikcn2kU2YKBEDGSXyIYxOGt9m0)
 
 数据库名称：info_collect`<br/>`
 表名称：all_log`<br/>`
@@ -61,20 +59,4 @@ window暴露downLoadFile函数可以直接调用触发下载 window.downLoadFile
 
 下载结果是excel表格
 
-        // console.time('add10000')
-        // let list = []
-        // for (let i = 1; i < 10000; i++) {
-        //     let behaviorInfo = new commonRecord();
-        //     Object.assign(behaviorInfo.saveBase, {
-        //         className: 'qw',
-        //         tagName: 'qwer',
-        //         innerText: 'qwer',
-        //         logType: CLICK_LOG
-        //     })
-        //     stagList.push(behaviorInfo.saveBase)
-        //     list.push(saveStag())
-        // }
-        // Promise.all(list).then(() => {
-        //     console.timeEnd('add10000')
-        // })
 
