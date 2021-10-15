@@ -1,19 +1,16 @@
 {
-  "name": "hll_static_collect",
-  "version": "1.0.0",
+  "name": "static_collect",
+  "version": "1.0.1",
   "description": "用户行为本地收集",
   "main": "dist/bundle.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "serve": "rollup -c -w",
+    "dev": "rollup -c -w",
     "build": "rollup -c"
   },
   "author": "",
   "license": "ISC",
-  "dependencies": {
-    "indexdbwrapper": "^1.0.4",
-    "moment": "^2.29.1"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@babel/core": "^7.15.0",
     "@babel/plugin-external-helpers": "^7.14.5",
